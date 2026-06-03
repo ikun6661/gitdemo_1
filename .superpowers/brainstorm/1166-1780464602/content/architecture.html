@@ -1,0 +1,58 @@
+<h2>整体架构</h2>
+<p class="subtitle">Next.js 全栈单体应用，模块化分层设计</p>
+
+<div class="mockup" style="margin-bottom:24px">
+  <div class="mockup-header">EcomFlow 系统架构</div>
+  <div class="mockup-body" style="padding:24px;background:#1e1e2e;color:#cdd6f4;font-family:monospace;font-size:13px;line-height:1.8">
+    ┌─────────────────────────────────────────────────┐<br>
+    │  🖥️  <b>前端层 (React + Tailwind + shadcn/ui)</b>    │<br>
+    │  ┌──────────┬──────────┬──────────┬──────────┐  │<br>
+    │  │ 流程看板  │ 管理后台  │ 演示模式  │ 登录注册  │  │<br>
+    │  └──────────┴──────────┴──────────┴──────────┘  │<br>
+    └──────────────────────┬──────────────────────────┘<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│ tRPC (端到端类型安全)<br>
+    ┌──────────────────────┴──────────────────────────┐<br>
+    │  ⚙️  <b>后端层 (Next.js API Routes)</b>            │<br>
+    │  ┌──────────┬──────────┬──────────┬──────────┐  │<br>
+    │  │ 工作流引擎│ 商品服务  │ 订单服务  │ 审批服务  │  │<br>
+    │  └──────────┴──────────┴──────────┴──────────┘  │<br>
+    └──────────────────────┬──────────────────────────┘<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│ Prisma ORM<br>
+    ┌──────────────────────┴──────────────────────────┐<br>
+    │  🗄️  <b>数据层</b>                                  │<br>
+    │  ┌─────────────────┐  ┌─────────────────────┐   │<br>
+    │  │  PostgreSQL      │  │  Redis (缓存/队列)   │   │<br>
+    │  └─────────────────┘  └─────────────────────┘   │<br>
+    └─────────────────────────────────────────────────┘<br>
+  </div>
+</div>
+
+<div class="section">
+  <h3>四大前端页面</h3>
+  <div class="cards">
+    <div class="card" style="cursor:default">
+      <div class="card-body">
+        <h3>📋 流程看板</h3>
+        <p>卡牌式展示所有运行中的工作流实例，每个实例显示当前节点、已完成节点、可执行操作。分"订单流程"和"审批流程"两个 Tab。</p>
+      </div>
+    </div>
+    <div class="card" style="cursor:default">
+      <div class="card-body">
+        <h3>🎮 演示模式</h3>
+        <p>专门给客户看的页面。预设几个演示场景，分步点击推进，每步有动画过渡和说明文案。不暴露管理功能。</p>
+      </div>
+    </div>
+    <div class="card" style="cursor:default">
+      <div class="card-body">
+        <h3>⚙️ 管理后台</h3>
+        <p>商品 CRUD、用户管理、订单列表。常规后台界面，不花哨但实用。</p>
+      </div>
+    </div>
+    <div class="card" style="cursor:default">
+      <div class="card-body">
+        <h3>🔐 登录注册</h3>
+        <p>NextAuth.js，支持邮箱密码登录。区分管理员和普通用户角色。</p>
+      </div>
+    </div>
+  </div>
+</div>

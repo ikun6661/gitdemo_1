@@ -1,0 +1,32 @@
+<h2>三种架构方案</h2>
+<p class="subtitle">核心问题：工作流引擎怎么设计，才能同时支撑订单链路和审批流？</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>轻量状态机</h3>
+      <p>一个通用的 <code>workflows</code> 表定义流程模板，<code>workflow_instances</code> 表记录每次运行。每个节点有进入条件、执行动作、出口规则。订单和审批都走同一套引擎。</p>
+      <p><strong>优点：</strong>架构统一，扩展性强，后续改配置化容易</p>
+      <p><strong>缺点：</strong>前期设计需要多想几步</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>独立模块</h3>
+      <p>订单流程和审批流程各自独立实现，各管各的状态机。不共享引擎逻辑，复用的只是前端可视化组件。</p>
+      <p><strong>优点：</strong>简单直接，开发快，互不影响</p>
+      <p><strong>缺点：</strong>每加一个新流程都要重写状态逻辑，后续改配置化几乎要推倒重来</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>事件驱动</h3>
+      <p>不定义"流程模板"，而是用事件总线串联：订单创建→触发支付→支付成功→触发发货。每个服务监听事件并执行自己的逻辑，松耦合。</p>
+      <p><strong>优点：</strong>解耦彻底，适合复杂业务</p>
+      <p><strong>缺点：</strong>调试困难，流程不直观，不适合演示场景</p>
+    </div>
+  </div>
+</div>

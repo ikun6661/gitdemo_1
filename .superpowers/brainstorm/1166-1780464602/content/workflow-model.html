@@ -1,0 +1,83 @@
+<h2>工作流引擎 — 数据模型</h2>
+<p class="subtitle">三张核心表驱动所有流程</p>
+
+<div class="mockup" style="margin-bottom:24px">
+  <div class="mockup-header">核心表关系</div>
+  <div class="mockup-body" style="padding:20px;background:#1e1e2e;color:#cdd6f4;font-family:monospace;font-size:12px;line-height:1.7">
+    ┌─────────────────────────┐<br>
+    │  <b>workflows</b>  流程模板    │<br>
+    │  ──────────────────────  │<br>
+    │  id, name, type,         │<br>
+    │  nodes (JSON),           │<br>
+    │  edges (JSON)            │<br>
+    └───────────┬─────────────┘<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│ 1:N<br>
+    ┌───────────┴─────────────┐<br>
+    │  <b>workflow_instances</b>   │<br>
+    │  <b>流程实例</b>               │<br>
+    │  ──────────────────────  │<br>
+    │  id, workflow_id,        │<br>
+    │  current_node,           │<br>
+    │  status, target_type,    │<br>
+    │  target_id, context(JSON)│<br>
+    └───────────┬─────────────┘<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│ 1:N<br>
+    ┌───────────┴─────────────┐<br>
+    │  <b>workflow_logs</b>        │<br>
+    │  <b>流转日志</b>               │<br>
+    │  ──────────────────────  │<br>
+    │  id, instance_id,        │<br>
+    │  from_node, to_node,     │<br>
+    │  operator, action,       │<br>
+    │  comment, metadata(JSON) │<br>
+    └─────────────────────────┘<br>
+  </div>
+</div>
+
+<div class="section">
+  <h3>预置两个流程模板</h3>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">订单全链路流程</div>
+    <div class="mockup-body" style="padding:16px;font-size:13px;line-height:2">
+      <span style="background:#313244;color:#f9e2af;padding:2px 12px;border-radius:12px">待支付</span> →<br>
+      <span style="background:#313244;color:#89dceb;padding:2px 12px;border-radius:12px">已支付</span> →<br>
+      <span style="background:#313244;color:#a6e3a1;padding:2px 12px;border-radius:12px">已发货</span> →<br>
+      <span style="background:#313244;color:#cba6f7;padding:2px 12px;border-radius:12px">已收货</span> →<br>
+      <span style="background:#313244;color:#94e2d5;padding:2px 12px;border-radius:12px">已完成</span><br>
+      <br>
+      <span style="color:#f38ba8">任意节点 → 已取消</span><br>
+      <span style="color:#f38ba8">已发货/已收货 → 退款中 → 已退款</span>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">审批工作流</div>
+    <div class="mockup-body" style="padding:16px;font-size:13px;line-height:2">
+      <b>退款审批：</b><br>
+      <span style="background:#313244;color:#f9e2af;padding:2px 12px;border-radius:12px">待审核</span> →<br>
+      <span style="background:#313244;color:#89dceb;padding:2px 12px;border-radius:12px">客服审核</span> →<br>
+      <span style="background:#313244;color:#a6e3a1;padding:2px 12px;border-radius:12px">经理审批</span> →<br>
+      <span style="background:#313244;color:#cba6f7;padding:2px 12px;border-radius:12px">已通过</span><br>
+      <br>
+      <b>商品上架审批：</b><br>
+      <span style="background:#313244;color:#f9e2af;padding:2px 12px;border-radius:12px">草稿</span> →<br>
+      <span style="background:#313244;color:#89dceb;padding:2px 12px;border-radius:12px">待审核</span> →<br>
+      <span style="background:#313244;color:#a6e3a1;padding:2px 12px;border-radius:12px">已上架</span><br>
+      <br>
+      <span style="color:#f38ba8">任意节点 → 已驳回</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>target 多态关联</h3>
+  <p><code>workflow_instances.target_type</code> + <code>target_id</code> 实现：</p>
+  <ul>
+    <li><code>target_type = "order"</code> → 关联 orders 表</li>
+    <li><code>target_type = "refund"</code> → 关联 refunds 表</li>
+    <li><code>target_type = "product"</code> → 关联 products 表</li>
+  </ul>
+  <p>一份引擎代码，驱动所有业务。后续加新流程只需新增 workflow 模板。</p>
+</div>
