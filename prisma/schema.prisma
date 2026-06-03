@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,205 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ========== 用户 ==========
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("customer") // admin | operator | customer
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orders    Order[]
+  refunds   Refund[]
+  accounts  Account[]
+  sessions  Session[]
+  cartItems CartItem[]
+
+  @@map("users")
+}
+
+// NextAuth.js 所需表
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ========== 商品 ==========
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  parentId  String?  @map("parent_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  price       Int // 以分为单位
+  stock       Int      @default(0)
+  images      Json     @default("[]")
+  categoryId  String   @map("category_id")
+  status      String   @default("draft") // draft | pending | published
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  category   Category    @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@map("products")
+}
+
+// ========== 购物车 ==========
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+// ========== 订单 ==========
+model Order {
+  id          String   @id @default(cuid())
+  orderNo     String   @unique @map("order_no")
+  userId      String   @map("user_id")
+  totalAmount Int      @map("total_amount")
+  address     Json     @default("{}")
+  status      String   @default("pending_payment")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user              User               @relation(fields: [userId], references: [id])
+  items             OrderItem[]
+  refunds           Refund[]
+  workflowInstances WorkflowInstance[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String @map("order_id")
+  productId String @map("product_id")
+  quantity  Int
+  unitPrice Int    @map("unit_price")
+  snapshot  Json   @default("{}")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// ========== 退款 ==========
+model Refund {
+  id        String   @id @default(cuid())
+  orderId   String   @map("order_id")
+  userId    String   @map("user_id")
+  reason    String
+  amount    Int
+  status    String   @default("pending")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  order             Order              @relation(fields: [orderId], references: [id])
+  user              User               @relation(fields: [userId], references: [id])
+  workflowInstances WorkflowInstance[]
+
+  @@map("refunds")
+}
+
+// ========== 工作流引擎 ==========
+model Workflow {
+  id        String   @id @default(cuid())
+  name      String
+  type      String // order_flow | refund_approval | product_approval
+  nodes     Json     @default("[]")
+  edges     Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  instances WorkflowInstance[]
+
+  @@map("workflows")
+}
+
+model WorkflowInstance {
+  id          String    @id @default(cuid())
+  workflowId  String    @map("workflow_id")
+  currentNode String    @map("current_node")
+  status      String    @default("running") // running | completed | cancelled
+  targetType  String    @map("target_type") // order | refund | product
+  targetId    String    @map("target_id")
+  context     Json      @default("{}")
+  startedAt   DateTime? @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workflow Workflow      @relation(fields: [workflowId], references: [id])
+  order    Order?        @relation(fields: [targetId], references: [id], map: "workflow_instances_order_id_fkey")
+  refund   Refund?       @relation(fields: [targetId], references: [id], map: "workflow_instances_refund_id_fkey")
+  logs     WorkflowLog[]
+
+  @@map("workflow_instances")
+}
+
+model WorkflowLog {
+  id         String   @id @default(cuid())
+  instanceId String   @map("instance_id")
+  fromNode   String   @map("from_node")
+  toNode     String   @map("to_node")
+  operator   String   @default("system")
+  action     String
+  comment    String   @default("")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_logs")
 }
