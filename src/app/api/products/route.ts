@@ -37,7 +37,13 @@ export async function GET(req: NextRequest) {
     prisma.product.count({ where }),
   ]);
 
-  return NextResponse.json({ products, total, page, pageSize });
+  // 解析 JSON 字符串字段
+  const parsed = products.map((p) => ({
+    ...p,
+    images: typeof p.images === "string" ? JSON.parse(p.images) : p.images,
+  }));
+
+  return NextResponse.json({ products: parsed, total, page, pageSize });
 }
 
 export async function POST(req: NextRequest) {

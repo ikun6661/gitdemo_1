@@ -4,8 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
+
 
 // ========== 用户 ==========
 model User {
@@ -79,7 +80,7 @@ model Product {
   description String   @default("")
   price       Int // 以分为单位
   stock       Int      @default(0)
-  images      Json     @default("[]")
+  images      String     @default("[]")
   categoryId  String   @map("category_id")
   status      String   @default("draft") // draft | pending | published
   createdAt   DateTime @default(now()) @map("created_at")
@@ -113,7 +114,7 @@ model Order {
   orderNo     String   @unique @map("order_no")
   userId      String   @map("user_id")
   totalAmount Int      @map("total_amount")
-  address     Json     @default("{}")
+  address     String     @default("{}")
   status      String   @default("pending_payment")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -132,7 +133,7 @@ model OrderItem {
   productId String @map("product_id")
   quantity  Int
   unitPrice Int    @map("unit_price")
-  snapshot  Json   @default("{}")
+  snapshot  String   @default("{}")
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -163,8 +164,8 @@ model Workflow {
   id        String   @id @default(cuid())
   name      String
   type      String // order_flow | refund_approval | product_approval
-  nodes     Json     @default("[]")
-  edges     Json     @default("[]")
+  nodes     String     @default("[]")
+  edges     String     @default("[]")
   createdAt DateTime @default(now()) @map("created_at")
 
   instances WorkflowInstance[]
@@ -179,14 +180,14 @@ model WorkflowInstance {
   status      String    @default("running") // running | completed | cancelled
   targetType  String    @map("target_type") // order | refund | product
   targetId    String    @map("target_id")
-  context     Json      @default("{}")
+  context     String      @default("{}")
   startedAt   DateTime? @map("started_at")
   endedAt     DateTime? @map("ended_at")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   workflow Workflow      @relation(fields: [workflowId], references: [id])
-  order    Order?        @relation(fields: [targetId], references: [id], map: "workflow_instances_order_id_fkey")
-  refund   Refund?       @relation(fields: [targetId], references: [id], map: "workflow_instances_refund_id_fkey")
+  order    Order?        @relation(fields: [targetId], references: [id])
+  refund   Refund?       @relation(fields: [targetId], references: [id])
   logs     WorkflowLog[]
 
   @@map("workflow_instances")
@@ -200,7 +201,7 @@ model WorkflowLog {
   operator   String   @default("system")
   action     String
   comment    String   @default("")
-  metadata   Json     @default("{}")
+  metadata   String     @default("{}")
   createdAt  DateTime @default(now()) @map("created_at")
 
   instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)

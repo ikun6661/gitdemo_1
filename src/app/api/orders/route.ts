@@ -97,14 +97,14 @@ export async function POST(req: NextRequest) {
         orderNo,
         userId,
         totalAmount,
-        address: address ?? {},
+        address: JSON.stringify(address ?? {}),
         status: "pending_payment",
         items: {
           create: orderItems.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
             unitPrice: i.unitPrice,
-            snapshot: i.snapshot,
+            snapshot: JSON.stringify(i.snapshot),
           })),
         },
       },

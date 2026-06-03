@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
     data: {
       orderNo: `DEMO-${Date.now().toString(36).toUpperCase()}`,
       userId: customer.id, totalAmount: product.price,
-      address: { name: "演示客户", phone: "13800138000", address: "北京市朝阳区演示路1号" },
+      address: JSON.stringify({ name: "演示客户", phone: "13800138000", address: "北京市朝阳区演示路1号" }),
       status: "pending_payment",
-      items: { create: [{ productId: product.id, quantity: 1, unitPrice: product.price, snapshot: { name: product.name, price: product.price } }] },
+      items: { create: [{ productId: product.id, quantity: 1, unitPrice: product.price, snapshot: JSON.stringify({ name: product.name, price: product.price }) }] },
     },
   });
 

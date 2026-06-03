@@ -1,9 +1,16 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@/generated/prisma/client";
 import type { WorkflowNode, WorkflowEdge, CreateInstanceInput, TransitionInput } from "./types";
 
 type JsonNode = WorkflowNode;
 type JsonEdge = WorkflowEdge;
+
+function parseNodes(raw: string): JsonNode[] {
+  return JSON.parse(raw) as JsonNode[];
+}
+
+function parseEdges(raw: string): JsonEdge[] {
+  return JSON.parse(raw) as JsonEdge[];
+}
 
 async function findWorkflowByType(type: string) {
   const workflow = await prisma.workflow.findFirst({ where: { type } });
@@ -17,7 +24,7 @@ function findNextNode(currentNode: string, trigger: string, edges: JsonEdge[]): 
 
 export async function createInstance(input: CreateInstanceInput) {
   const workflow = await findWorkflowByType(input.workflowType);
-  const nodes = workflow.nodes as unknown as JsonNode[];
+  const nodes = parseNodes(workflow.nodes);
   if (nodes.length === 0) throw new Error("工作流模板无节点");
 
   const startNode = nodes[0].key;
@@ -29,7 +36,7 @@ export async function createInstance(input: CreateInstanceInput) {
       status: "running",
       targetType: input.targetType,
       targetId: input.targetId,
-      context: (input.context ?? {}) as Prisma.InputJsonValue,
+      context: JSON.stringify(input.context ?? {}),
       startedAt: new Date(),
     },
   });
@@ -57,7 +64,7 @@ export async function transition(input: TransitionInput) {
   if (!instance) throw new Error("工作流实例不存在");
   if (instance.status !== "running") throw new Error(`工作流已结束，状态: ${instance.status}`);
 
-  const edges = instance.workflow.edges as unknown as JsonEdge[];
+  const edges = parseEdges(instance.workflow.edges);
   const next = findNextNode(instance.currentNode, input.trigger, edges);
 
   if (!next) {
@@ -100,7 +107,7 @@ export async function listInstances(params: {
     where.workflowId = workflow.id;
   }
 
-  const [instances, total] = await Promise.all([
+  const [rawInstances, total] = await Promise.all([
     prisma.workflowInstance.findMany({
       where,
       include: { workflow: true, logs: { orderBy: { createdAt: "asc" } } },
@@ -111,6 +118,17 @@ export async function listInstances(params: {
     prisma.workflowInstance.count({ where }),
   ]);
 
+  // Parse JSON fields for frontend consumption
+  const instances = rawInstances.map((inst) => ({
+    ...inst,
+    context: typeof inst.context === "string" ? JSON.parse(inst.context) : inst.context,
+    workflow: {
+      ...inst.workflow,
+      nodes: typeof inst.workflow.nodes === "string" ? parseNodes(inst.workflow.nodes) : inst.workflow.nodes,
+      edges: typeof inst.workflow.edges === "string" ? parseEdges(inst.workflow.edges) : inst.workflow.edges,
+    },
+  }));
+
   return { instances, total };
 }
 
@@ -120,7 +138,17 @@ export async function getInstance(id: string) {
     include: { workflow: true, logs: { orderBy: { createdAt: "asc" } } },
   });
   if (!instance) throw new Error("实例不存在");
-  return instance;
+
+  // Parse JSON fields
+  return {
+    ...instance,
+    context: typeof instance.context === "string" ? JSON.parse(instance.context) : instance.context,
+    workflow: {
+      ...instance.workflow,
+      nodes: typeof instance.workflow.nodes === "string" ? parseNodes(instance.workflow.nodes) : instance.workflow.nodes,
+      edges: typeof instance.workflow.edges === "string" ? parseEdges(instance.workflow.edges) : instance.workflow.edges,
+    },
+  };
 }
 
 export function getAvailableTransitions(currentNode: string, edges: JsonEdge[]): JsonEdge[] {
