@@ -6,11 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getDefaultRedirectForRole, isUserRole } from "@/server/domain/constants";
+import { prisma } from "@/lib/prisma";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; error?: string; registered?: string }>;
 }) {
   const sp = await searchParams;
 
@@ -23,9 +25,21 @@ export default async function LoginPage({
         <form
           action={async (formData: FormData) => {
             "use server";
-            const email = formData.get("email") as string;
-            const password = formData.get("password") as string;
-            const callbackUrl = sp?.callbackUrl || "/products";
+            const email = String(formData.get("email") ?? "")
+              .trim()
+              .toLowerCase();
+            const password = String(formData.get("password") ?? "");
+
+            const existingUser = await prisma.user.findUnique({
+              where: { email },
+              select: { role: true },
+            });
+
+            const callbackUrl =
+              sp?.callbackUrl ||
+              (existingUser && isUserRole(existingUser.role)
+                ? getDefaultRedirectForRole(existingUser.role)
+                : "/products");
 
             try {
               await signIn("credentials", { email, password, redirectTo: callbackUrl });
@@ -46,6 +60,7 @@ export default async function LoginPage({
             <Label htmlFor="password">密码</Label>
             <Input id="password" name="password" type="password" placeholder="demo123456" required />
           </div>
+          {sp?.registered && <p className="text-sm text-green-600">注册成功，请登录</p>}
           {sp?.error && (
             <p className="text-sm text-red-500">邮箱或密码错误，请重试</p>
           )}

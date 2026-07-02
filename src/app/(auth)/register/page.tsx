@@ -6,6 +6,7 @@ import Link from "next/link";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { validateRegisterInput } from "@/server/auth/register";
 
 export default async function RegisterPage({
   searchParams,
@@ -23,25 +24,33 @@ export default async function RegisterPage({
         <form
           action={async (formData: FormData) => {
             "use server";
-            const name = formData.get("name") as string;
-            const email = formData.get("email") as string;
-            const password = formData.get("password") as string;
+            const name = String(formData.get("name") ?? "");
+            const email = String(formData.get("email") ?? "");
+            const password = String(formData.get("password") ?? "");
 
-            if (!name || !email || !password) {
-              redirect("/register?error=missing");
+            const result = validateRegisterInput({ name, email, password });
+            if (!result.ok) {
+              redirect(`/register?error=${encodeURIComponent(result.error)}`);
             }
 
-            const existing = await prisma.user.findUnique({ where: { email } });
+            const existing = await prisma.user.findUnique({
+              where: { email: result.data.email },
+            });
             if (existing) {
-              redirect("/register?error=exists");
+              redirect(`/register?error=${encodeURIComponent("该邮箱已被注册")}`);
             }
 
-            const passwordHash = await bcrypt.hash(password, 10);
+            const passwordHash = await bcrypt.hash(result.data.password, 10);
             await prisma.user.create({
-              data: { name, email, passwordHash, role: "customer" },
+              data: {
+                name: result.data.name,
+                email: result.data.email,
+                passwordHash,
+                role: "customer",
+              },
             });
 
-            redirect("/login");
+            redirect("/login?registered=1");
           }}
           className="space-y-4"
         >
@@ -55,14 +64,9 @@ export default async function RegisterPage({
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">密码</Label>
-            <Input id="password" name="password" type="password" placeholder="至少6位" required minLength={6} />
+            <Input id="password" name="password" type="password" placeholder="至少 6 位" required minLength={6} />
           </div>
-          {sp?.error === "exists" && (
-            <p className="text-sm text-red-500">该邮箱已被注册</p>
-          )}
-          {sp?.error === "missing" && (
-            <p className="text-sm text-red-500">请填写所有必填字段</p>
-          )}
+          {sp?.error && <p className="text-sm text-red-500">{sp.error}</p>}
           <Button type="submit" className="w-full">注册</Button>
           <p className="text-center text-sm text-gray-500">
             已有账号？<Link href="/login" className="underline">去登录</Link>
