@@ -58,7 +58,12 @@ export async function POST(req: NextRequest) {
 
   const instance = await createInstance({
     workflowType: "order_flow", targetType: "order", targetId: order.id,
-    context: { orderNo: order.orderNo, amount: order.totalAmount, demo: true, operator: session.user?.name },
+    context: {
+      orderNo: order.orderNo,
+      amount: order.totalAmount,
+      demo: true,
+      operator: session.user?.name ?? undefined,
+    },
   });
 
   return NextResponse.json({ instance, order, stepIndex: 0 });

@@ -10,13 +10,32 @@ export interface WorkflowEdge {
   label: string;
 }
 
+export interface WorkflowDefinition {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
+export type WorkflowType =
+  | "order_flow"
+  | "refund_approval"
+  | "product_approval";
+
 export type TargetType = "order" | "refund" | "product";
 
+export type WorkflowStatus = "running" | "completed" | "cancelled";
+
+export interface WorkflowContext {
+  orderNo?: string;
+  amount?: number;
+  operator?: string;
+  [key: string]: unknown;
+}
+
 export interface CreateInstanceInput {
-  workflowType: "order_flow" | "refund_approval" | "product_approval";
+  workflowType: WorkflowType;
   targetType: TargetType;
   targetId: string;
-  context?: Record<string, unknown>;
+  context?: WorkflowContext;
 }
 
 export interface TransitionInput {

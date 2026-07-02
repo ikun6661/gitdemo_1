@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     context: {
       orderNo,
       amount: totalAmount,
-      operator: session.user?.name,
+      operator: session.user?.name ?? undefined,
     },
   });
 

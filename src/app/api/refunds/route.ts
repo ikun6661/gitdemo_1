@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       orderNo: order.orderNo,
       reason,
       amount: refund.amount,
-      operator: session.user?.name,
+      operator: session.user?.name ?? undefined,
     },
   });
 
