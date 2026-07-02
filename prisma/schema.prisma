@@ -1,10 +1,10 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 
@@ -122,8 +122,6 @@ model Order {
   user              User               @relation(fields: [userId], references: [id])
   items             OrderItem[]
   refunds           Refund[]
-  workflowInstances WorkflowInstance[]
-
   @@map("orders")
 }
 
@@ -154,8 +152,6 @@ model Refund {
 
   order             Order              @relation(fields: [orderId], references: [id])
   user              User               @relation(fields: [userId], references: [id])
-  workflowInstances WorkflowInstance[]
-
   @@map("refunds")
 }
 
@@ -186,8 +182,6 @@ model WorkflowInstance {
   createdAt   DateTime  @default(now()) @map("created_at")
 
   workflow Workflow      @relation(fields: [workflowId], references: [id])
-  order    Order?        @relation(fields: [targetId], references: [id])
-  refund   Refund?       @relation(fields: [targetId], references: [id])
   logs     WorkflowLog[]
 
   @@map("workflow_instances")

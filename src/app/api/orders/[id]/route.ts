@@ -16,16 +16,22 @@ export async function GET(
     include: {
       items: { include: { product: true } },
       user: { select: { name: true, email: true } },
-      workflowInstances: {
-        include: {
-          workflow: true,
-          logs: { orderBy: { createdAt: "asc" } },
-        },
-      },
     },
   });
 
   if (!order) return NextResponse.json({ error: "订单不存在" }, { status: 404 });
 
-  return NextResponse.json(order);
+  const workflowInstances = await prisma.workflowInstance.findMany({
+    where: {
+      targetType: "order",
+      targetId: id,
+    },
+    include: {
+      workflow: true,
+      logs: { orderBy: { createdAt: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return NextResponse.json({ ...order, workflowInstances });
 }
