@@ -44,3 +44,7 @@ next-env.d.ts
 dev.db
 dev.db-journal
 dev.db-wal
+
+# local agent/worktree helper files
+.superpowers/
+.worktrees/
