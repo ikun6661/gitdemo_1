@@ -9,11 +9,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
 
     const { id } = await params;
-    const order = await prisma.order.findUnique({
-      where: { id },
+    const order = await prisma.order.findFirst({
+      where:
+        user.role === "customer"
+          ? { id, userId: user.id }
+          : { id },
       include: {
         items: { include: { product: true } },
         user: { select: { name: true, email: true } },

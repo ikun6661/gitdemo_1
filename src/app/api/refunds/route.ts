@@ -7,9 +7,10 @@ import { errorResponse, notFound } from "@/server/shared/api";
 // 获取退款列表
 export async function GET() {
   try {
-    await requireAuth();
+    const user = await requireAuth();
 
     const refunds = await prisma.refund.findMany({
+      where: user.role === "customer" ? { userId: user.id } : undefined,
       include: {
         order: true,
         user: { select: { name: true } },
@@ -33,7 +34,12 @@ export async function POST(req: NextRequest) {
     const { orderId, reason, amount } = await req.json();
 
     // 校验订单是否存在
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    const order = await prisma.order.findFirst({
+      where:
+        user.role === "customer"
+          ? { id: orderId, userId: user.id }
+          : { id: orderId },
+    });
     if (!order) return notFound(new Error("订单不存在"));
 
     // 创建退款单
