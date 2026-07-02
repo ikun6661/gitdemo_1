@@ -1,4 +1,9 @@
-export type UserRole = "admin" | "operator" | "customer";
+import {
+  canAccessAdmin,
+  type UserRole,
+} from "@/server/domain/constants";
+
+export type { UserRole };
 
 export interface AuthUser {
   id: string;
@@ -8,5 +13,5 @@ export interface AuthUser {
 }
 
 export function isStaffRole(role: UserRole | undefined): boolean {
-  return role === "admin" || role === "operator";
+  return canAccessAdmin(role);
 }
