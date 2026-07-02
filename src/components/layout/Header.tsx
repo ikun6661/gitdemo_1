@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { isStaffRole } from "@/types/auth";
 
 export async function Header() {
   const session = await auth();
-  const user = session?.user as any;
+  const user = session?.user;
 
   return (
     <header className="border-b bg-white">
@@ -14,7 +15,7 @@ export async function Header() {
           {user ? (
             <>
               <Link href="/products" className="text-sm hover:underline">商品</Link>
-              {(user.role === "admin" || user.role === "operator") && (
+              {isStaffRole(user.role) && (
                 <>
                   <Link href="/dashboard" className="text-sm hover:underline">看板</Link>
                   <Link href="/demo" className="text-sm hover:underline">演示</Link>
