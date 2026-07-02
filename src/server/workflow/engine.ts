@@ -1,16 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import type { WorkflowNode, WorkflowEdge, CreateInstanceInput, TransitionInput } from "./types";
-
-type JsonNode = WorkflowNode;
-type JsonEdge = WorkflowEdge;
-
-function parseNodes(raw: string): JsonNode[] {
-  return JSON.parse(raw) as JsonNode[];
-}
-
-function parseEdges(raw: string): JsonEdge[] {
-  return JSON.parse(raw) as JsonEdge[];
-}
+import {
+  findNextEdge,
+  isEndNode,
+  parseWorkflowDefinition,
+} from "./definition";
+import type { CreateInstanceInput, TransitionInput, WorkflowEdge } from "./types";
 
 async function findWorkflowByType(type: string) {
   const workflow = await prisma.workflow.findFirst({ where: { type } });
@@ -18,16 +12,14 @@ async function findWorkflowByType(type: string) {
   return workflow;
 }
 
-function findNextNode(currentNode: string, trigger: string, edges: JsonEdge[]): JsonEdge | null {
-  return edges.find((e) => e.from === currentNode && e.trigger === trigger) ?? null;
-}
-
 export async function createInstance(input: CreateInstanceInput) {
   const workflow = await findWorkflowByType(input.workflowType);
-  const nodes = parseNodes(workflow.nodes);
-  if (nodes.length === 0) throw new Error("工作流模板无节点");
+  const definition = parseWorkflowDefinition(workflow.nodes, workflow.edges);
+  if (definition.nodes.length === 0) {
+    throw new Error("工作流模板无节点");
+  }
 
-  const startNode = nodes[0].key;
+  const startNode = definition.nodes[0].key;
 
   const instance = await prisma.workflowInstance.create({
     data: {
@@ -46,7 +38,7 @@ export async function createInstance(input: CreateInstanceInput) {
       instanceId: instance.id,
       fromNode: "",
       toNode: startNode,
-      operator: (input.context?.operator as string) ?? "system",
+      operator: input.context?.operator ?? "system",
       action: "start",
       comment: "流程启动",
     },
@@ -64,21 +56,28 @@ export async function transition(input: TransitionInput) {
   if (!instance) throw new Error("工作流实例不存在");
   if (instance.status !== "running") throw new Error(`工作流已结束，状态: ${instance.status}`);
 
-  const edges = parseEdges(instance.workflow.edges);
-  const next = findNextNode(instance.currentNode, input.trigger, edges);
+  const definition = parseWorkflowDefinition(
+    instance.workflow.nodes,
+    instance.workflow.edges,
+  );
+  const next = findNextEdge(
+    instance.currentNode,
+    input.trigger,
+    definition.edges,
+  );
 
   if (!next) {
     throw new Error(`无效流转: 从 "${instance.currentNode}" 通过 "${input.trigger}"`);
   }
 
-  const isEndNode = !edges.some((e) => e.from === next.to);
+  const hasEnded = isEndNode(next.to, definition.edges);
 
   const updated = await prisma.workflowInstance.update({
     where: { id: instance.id },
     data: {
       currentNode: next.to,
-      status: isEndNode ? "completed" : "running",
-      endedAt: isEndNode ? new Date() : null,
+      status: hasEnded ? "completed" : "running",
+      endedAt: hasEnded ? new Date() : null,
     },
   });
 
@@ -93,7 +92,7 @@ export async function transition(input: TransitionInput) {
     },
   });
 
-  return { instance: updated, fromNode: next.from, toNode: next.to, isEnd: isEndNode };
+  return { instance: updated, fromNode: next.from, toNode: next.to, isEnd: hasEnded };
 }
 
 export async function listInstances(params: {
@@ -118,14 +117,13 @@ export async function listInstances(params: {
     prisma.workflowInstance.count({ where }),
   ]);
 
-  // Parse JSON fields for frontend consumption
+  // 解析 JSON 字段，供前端直接消费。
   const instances = rawInstances.map((inst) => ({
     ...inst,
     context: typeof inst.context === "string" ? JSON.parse(inst.context) : inst.context,
     workflow: {
       ...inst.workflow,
-      nodes: typeof inst.workflow.nodes === "string" ? parseNodes(inst.workflow.nodes) : inst.workflow.nodes,
-      edges: typeof inst.workflow.edges === "string" ? parseEdges(inst.workflow.edges) : inst.workflow.edges,
+      ...parseWorkflowDefinition(inst.workflow.nodes, inst.workflow.edges),
     },
   }));
 
@@ -139,18 +137,17 @@ export async function getInstance(id: string) {
   });
   if (!instance) throw new Error("实例不存在");
 
-  // Parse JSON fields
+  // 解析 JSON 字段，供前端直接消费。
   return {
     ...instance,
     context: typeof instance.context === "string" ? JSON.parse(instance.context) : instance.context,
     workflow: {
       ...instance.workflow,
-      nodes: typeof instance.workflow.nodes === "string" ? parseNodes(instance.workflow.nodes) : instance.workflow.nodes,
-      edges: typeof instance.workflow.edges === "string" ? parseEdges(instance.workflow.edges) : instance.workflow.edges,
+      ...parseWorkflowDefinition(instance.workflow.nodes, instance.workflow.edges),
     },
   };
 }
 
-export function getAvailableTransitions(currentNode: string, edges: JsonEdge[]): JsonEdge[] {
+export function getAvailableTransitions(currentNode: string, edges: WorkflowEdge[]): WorkflowEdge[] {
   return edges.filter((e) => e.from === currentNode);
 }

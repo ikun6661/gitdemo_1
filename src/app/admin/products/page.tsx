@@ -43,7 +43,7 @@ export default function AdminProductsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => fetch(`/api/products/${id}`, { method: "DELETE" }).then((r) => r.json()),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-products"] }); toast.success("已删除"); },
-    onError: (e: any) => toast.error(e.message || "删除失败"),
+    onError: (error: Error) => toast.error(error.message || "删除失败"),
   });
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

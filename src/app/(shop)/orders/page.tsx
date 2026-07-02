@@ -16,6 +16,24 @@ const statusMap: Record<string, string> = {
   refunded: "已退款",
 };
 
+interface OrderItemView {
+  id: string;
+  quantity: number;
+  unitPrice: number;
+  product: {
+    name: string;
+  };
+}
+
+interface OrderView {
+  id: string;
+  orderNo: string;
+  totalAmount: number;
+  status: string;
+  createdAt: string;
+  items: OrderItemView[];
+}
+
 // 我的订单页
 export default function OrdersPage() {
   const { data: orders, isLoading } = useQuery({
@@ -33,7 +51,7 @@ export default function OrdersPage() {
         <p className="text-gray-500 text-center py-8">暂无订单</p>
       ) : (
         <div className="space-y-4">
-          {(orders as any[]).map((order) => (
+          {(orders as OrderView[]).map((order) => (
             <Card key={order.id}>
               <CardContent className="p-4">
                 <div className="flex justify-between items-center mb-2">

@@ -40,7 +40,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  const { scenario } = await req.json();
+  await req.json();
 
   const product = await prisma.product.findFirst({ where: { status: "published" } });
   const customer = await prisma.user.findFirst({ where: { email: "customer@ecomflow.com" } });

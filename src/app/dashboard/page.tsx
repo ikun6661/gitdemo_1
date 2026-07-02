@@ -8,10 +8,45 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
-interface Instance {
-  id: string; currentNode: string; status: string; targetType: string; targetId: string;
-  context: any; workflow: { name: string; nodes: any[]; edges: any[] };
-  logs: { toNode: string; action: string; createdAt: string }[];
+interface WorkflowNodeView {
+  key: string;
+  label: string;
+}
+
+interface WorkflowEdgeView {
+  from: string;
+  to: string;
+  trigger: string;
+  label: string;
+}
+
+interface WorkflowLogView {
+  toNode: string;
+  action: string;
+  createdAt: string;
+}
+
+interface WorkflowInstanceView {
+  id: string;
+  currentNode: string;
+  status: string;
+  targetType: string;
+  targetId: string;
+  context: {
+    orderNo?: string;
+    [key: string]: unknown;
+  };
+  workflow: {
+    name: string;
+    nodes: WorkflowNodeView[];
+    edges: WorkflowEdgeView[];
+  };
+  logs: WorkflowLogView[];
+}
+
+interface WorkflowInstancesResponse {
+  instances: WorkflowInstanceView[];
+  total: number;
 }
 
 const nodeColors: Record<string, string> = {
@@ -52,23 +87,22 @@ export default function DashboardPage() {
     mutationFn: ({ id, trigger }: { id: string; trigger: string }) =>
       fetch(`/api/workflows/instances/${id}/transition`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trigger }) }).then((r) => r.json()),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["instances"] }); toast.success("操作成功"); },
-    onError: (e: any) => toast.error(e.message || "操作失败"),
+    onError: (error: Error) => toast.error(error.message || "操作失败"),
   });
 
-  function nextTrigger(instance: Instance): { label: string; trigger: string } | null {
-    const edges = instance.workflow.edges as any[];
-    const available = edges.filter((e: any) => e.from === instance.currentNode);
+  function nextTrigger(instance: WorkflowInstanceView): { label: string; trigger: string } | null {
+    const available = instance.workflow.edges.filter((edge) => edge.from === instance.currentNode);
     if (available.length === 0) return null;
     return { label: available[0].label, trigger: available[0].trigger };
   }
 
-  function renderInstances(data: any) {
+  function renderInstances(data: WorkflowInstancesResponse | undefined) {
     if (!data?.instances?.length) return <p className="text-gray-500 text-center py-8">暂无数据</p>;
     return (
       <div className="grid gap-4">
-        {data.instances.map((inst: Instance) => {
+        {data.instances.map((inst) => {
           const next = nextTrigger(inst);
-          const nodes = inst.workflow.nodes as any[];
+          const nodes = inst.workflow.nodes;
           const doneNodes = inst.logs.map((l) => l.toNode);
           const currentNodeLabel = nodes.find((n) => n.key === inst.currentNode)?.label ?? inst.currentNode;
           return (
@@ -77,12 +111,12 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <span className="font-bold text-lg">{inst.workflow.name}</span>
-                    {inst.context?.orderNo && <span className="ml-3 text-sm text-gray-500">{inst.context.orderNo as string}</span>}
+                    {inst.context.orderNo && <span className="ml-3 text-sm text-gray-500">{inst.context.orderNo}</span>}
                   </div>
                   <Badge className={nodeColors[inst.currentNode] ?? "bg-gray-100"}>{currentNodeLabel}</Badge>
                 </div>
                 <div className="flex items-center gap-1 mb-3 flex-wrap">
-                  {nodes.map((node: any, idx: number) => {
+                  {nodes.map((node, idx) => {
                     const isDone = doneNodes.includes(node.key);
                     const isCurrent = node.key === inst.currentNode;
                     return (

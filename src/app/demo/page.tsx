@@ -41,7 +41,7 @@ export default function DemoPage() {
       if (data.isComplete) toast.success("流程完成！");
       setState((s) => ({ ...s, stepIndex: data.stepIndex }));
     },
-    onError: (e: any) => toast.error(e.message || "推进失败"),
+    onError: (error: Error) => toast.error(error.message || "推进失败"),
   });
 
   const resetMutation = useMutation({
