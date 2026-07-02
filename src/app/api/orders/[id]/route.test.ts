@@ -56,4 +56,34 @@ describe("GET /api/orders/[id]", () => {
     expect(mocks.workflowInstanceFindMany).not.toHaveBeenCalled();
     expect(response.status).toBe(404);
   });
+
+  it("运营角色按订单 id 查询详情", async () => {
+    mocks.requireAuth.mockResolvedValue({
+      id: "operator-1",
+      name: "Operator",
+      email: "operator@example.com",
+      role: "operator",
+    });
+    mocks.orderFindFirst.mockResolvedValue({
+      id: "order-1",
+      userId: "user-1",
+    });
+    mocks.workflowInstanceFindMany.mockResolvedValue([]);
+
+    const response = await GET(
+      new NextRequest("http://test.local/api/orders/order-1"),
+      {
+        params: Promise.resolve({ id: "order-1" }),
+      }
+    );
+
+    expect(mocks.orderFindFirst).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      include: {
+        items: { include: { product: true } },
+        user: { select: { name: true, email: true } },
+      },
+    });
+    expect(response.status).toBe(200);
+  });
 });

@@ -27,7 +27,14 @@ export async function requireAuth(): Promise<AuthUser> {
     throw new AuthRequiredError();
   }
 
-  return session.user;
+  if (!isUserRole(session.user.role)) {
+    throw new PermissionDeniedError();
+  }
+
+  return {
+    ...session.user,
+    role: session.user.role,
+  };
 }
 
 export async function requireStaff(): Promise<AuthUser> {

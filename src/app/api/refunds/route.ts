@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/server/auth/guards";
+import { canAccessAdmin } from "@/server/domain/constants";
 import { createInstance } from "@/server/workflow/engine";
 import { errorResponse, notFound } from "@/server/shared/api";
 
@@ -10,7 +11,7 @@ export async function GET() {
     const user = await requireAuth();
 
     const refunds = await prisma.refund.findMany({
-      where: user.role === "customer" ? { userId: user.id } : undefined,
+      where: canAccessAdmin(user.role) ? undefined : { userId: user.id },
       include: {
         order: true,
         user: { select: { name: true } },
@@ -30,15 +31,14 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth();
 
-    const userId = user.id;
     const { orderId, reason, amount } = await req.json();
 
     // 校验订单是否存在
     const order = await prisma.order.findFirst({
       where:
-        user.role === "customer"
-          ? { id: orderId, userId: user.id }
-          : { id: orderId },
+        canAccessAdmin(user.role)
+          ? { id: orderId }
+          : { id: orderId, userId: user.id },
     });
     if (!order) return notFound(new Error("订单不存在"));
 
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     const refund = await prisma.refund.create({
       data: {
         orderId,
-        userId,
+        userId: order.userId,
         reason,
         amount: amount ?? order.totalAmount,
       },

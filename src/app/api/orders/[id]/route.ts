@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/server/auth/guards";
+import { canAccessAdmin } from "@/server/domain/constants";
 import { errorResponse } from "@/server/shared/api";
 
 // 获取订单详情（含工作流实例）
@@ -14,9 +15,7 @@ export async function GET(
     const { id } = await params;
     const order = await prisma.order.findFirst({
       where:
-        user.role === "customer"
-          ? { id, userId: user.id }
-          : { id },
+        canAccessAdmin(user.role) ? { id } : { id, userId: user.id },
       include: {
         items: { include: { product: true } },
         user: { select: { name: true, email: true } },

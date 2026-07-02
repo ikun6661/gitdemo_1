@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { GET, POST } from "./route";
 
 const mocks = vi.hoisted(() => ({
+  createInstance: vi.fn(),
   orderFindFirst: vi.fn(),
   orderFindUnique: vi.fn(),
   refundCreate: vi.fn(),
@@ -28,7 +29,7 @@ vi.mock("@/server/auth/guards", () => ({
 }));
 
 vi.mock("@/server/workflow/engine", () => ({
-  createInstance: vi.fn(),
+  createInstance: mocks.createInstance,
 }));
 
 describe("/api/refunds", () => {
@@ -83,5 +84,49 @@ describe("/api/refunds", () => {
     });
     expect(mocks.refundCreate).not.toHaveBeenCalled();
     expect(response.status).toBe(404);
+  });
+
+  it("运营代客申请退款时退款归属订单用户", async () => {
+    mocks.requireAuth.mockResolvedValue({
+      id: "operator-1",
+      name: "Operator",
+      email: "operator@example.com",
+      role: "operator",
+    });
+    mocks.orderFindFirst.mockResolvedValue({
+      id: "order-1",
+      userId: "customer-1",
+      orderNo: "ORD-1",
+      totalAmount: 1000,
+    });
+    mocks.refundCreate.mockResolvedValue({
+      id: "refund-1",
+      amount: 500,
+    });
+    mocks.createInstance.mockResolvedValue({});
+
+    const response = await POST(
+      new NextRequest("http://test.local/api/refunds", {
+        method: "POST",
+        body: JSON.stringify({
+          orderId: "order-1",
+          reason: "售后代处理",
+          amount: 500,
+        }),
+      })
+    );
+
+    expect(mocks.orderFindFirst).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+    });
+    expect(mocks.refundCreate).toHaveBeenCalledWith({
+      data: {
+        orderId: "order-1",
+        userId: "customer-1",
+        reason: "售后代处理",
+        amount: 500,
+      },
+    });
+    expect(response.status).toBe(201);
   });
 });

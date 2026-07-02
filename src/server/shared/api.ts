@@ -3,6 +3,7 @@ import {
   AuthRequiredError,
   PermissionDeniedError,
 } from "@/server/auth/guards";
+import { ZodError } from "zod";
 import { getErrorMessage } from "./errors";
 
 export function unauthorized(message = "未登录") {
@@ -21,6 +22,10 @@ export function notFound(error: unknown) {
   return NextResponse.json({ error: getErrorMessage(error) }, { status: 404 });
 }
 
+export function serverError() {
+  return NextResponse.json({ error: "服务器错误" }, { status: 500 });
+}
+
 export function errorResponse(error: unknown) {
   if (error instanceof AuthRequiredError) {
     return unauthorized(error.message);
@@ -30,5 +35,9 @@ export function errorResponse(error: unknown) {
     return forbidden(error.message);
   }
 
-  return badRequest(error);
+  if (error instanceof ZodError) {
+    return badRequest(error);
+  }
+
+  return serverError();
 }
