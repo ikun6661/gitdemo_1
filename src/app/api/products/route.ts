@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
-import { badRequest, unauthorized } from "@/server/shared/api";
+import { requireStaff } from "@/server/auth/guards";
+import { PRODUCT_STATUSES } from "@/server/domain/constants";
+import { errorResponse } from "@/server/shared/api";
 import { z } from "zod";
 
 const createSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  shortDescription: z.string().optional(),
   price: z.number().int().positive(),
   stock: z.number().int().min(0),
   categoryId: z.string().min(1),
   images: z.array(z.string()).optional(),
-  status: z.enum(["draft", "pending", "published"]).optional(),
+  sellingPoints: z.array(z.string()).optional(),
+  specs: z.record(z.string(), z.unknown()).optional(),
+  seoKeywords: z.array(z.string()).optional(),
+  aiSummary: z.string().optional(),
+  status: z.enum(PRODUCT_STATUSES).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -48,20 +54,22 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return unauthorized();
-
   try {
+    await requireStaff();
     const body = await req.json();
     const data = createSchema.parse(body);
+    const { images, sellingPoints, specs, seoKeywords, ...productData } = data;
     const product = await prisma.product.create({
       data: {
-        ...data,
-        images: JSON.stringify(data.images ?? []),
+        ...productData,
+        images: JSON.stringify(images ?? []),
+        sellingPoints: JSON.stringify(sellingPoints ?? []),
+        specs: JSON.stringify(specs ?? {}),
+        seoKeywords: JSON.stringify(seoKeywords ?? []),
       },
     });
     return NextResponse.json(product, { status: 201 });
   } catch (error: unknown) {
-    return badRequest(error);
+    return errorResponse(error);
   }
 }
