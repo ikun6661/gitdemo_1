@@ -45,7 +45,13 @@ export default async function LoginPage({
               await signIn("credentials", { email, password, redirectTo: callbackUrl });
             } catch (error) {
               if (error instanceof CredentialsSignin) {
-                redirect(`/login?error=CredentialsSignin`);
+                const params = new URLSearchParams({
+                  error: "CredentialsSignin",
+                });
+                if (sp?.callbackUrl) {
+                  params.set("callbackUrl", sp.callbackUrl);
+                }
+                redirect(`/login?${params.toString()}`);
               }
               throw error;
             }
