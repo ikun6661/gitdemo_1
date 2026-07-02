@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { badRequest, notFound, unauthorized } from "@/server/shared/api";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -13,34 +14,40 @@ const updateSchema = z.object({
   status: z.enum(["draft", "pending", "published"]).optional(),
 });
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export async function GET(req: NextRequest, ctx: RouteContext<"/api/products/[id]">) {
+  const { id } = await ctx.params;
   const product = await prisma.product.findUnique({ where: { id }, include: { category: true } });
-  if (!product) return NextResponse.json({ error: "商品不存在" }, { status: 404 });
+  if (!product) return notFound(new Error("商品不存在"));
   return NextResponse.json(product);
 }
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: RouteContext<"/api/products/[id]">) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  const { id } = await params;
+  if (!session) return unauthorized();
+  const { id } = await ctx.params;
   try {
     const body = await req.json();
     const data = updateSchema.parse(body);
-    const product = await prisma.product.update({ where: { id }, data: data as any });
+    const product = await prisma.product.update({
+      where: { id },
+      data: {
+        ...data,
+        images: data.images ? JSON.stringify(data.images) : undefined,
+      },
+    });
     return NextResponse.json(product);
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 400 });
+  } catch (error: unknown) {
+    return badRequest(error);
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: RouteContext<"/api/products/[id]">) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  const { id } = await params;
+  if (!session) return unauthorized();
+  const { id } = await ctx.params;
   const orderItemCount = await prisma.orderItem.count({ where: { productId: id } });
   if (orderItemCount > 0) {
-    return NextResponse.json({ error: "该商品已关联订单，不可删除" }, { status: 400 });
+    return badRequest(new Error("该商品已关联订单，不可删除"));
   }
   await prisma.product.delete({ where: { id } });
   return NextResponse.json({ success: true });

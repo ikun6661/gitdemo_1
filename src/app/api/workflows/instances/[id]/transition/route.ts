@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transition } from "@/server/workflow/engine";
 import { auth } from "@/lib/auth";
+import { badRequest, unauthorized } from "@/server/shared/api";
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: RouteContext<"/api/workflows/instances/[id]/transition">) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!session) return unauthorized();
   try {
-    const { id } = await params;
+    const { id } = await ctx.params;
     const body = await req.json();
     const result = await transition({
       instanceId: id,
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       comment: body.comment ?? "",
     });
     return NextResponse.json(result);
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 400 });
+  } catch (error: unknown) {
+    return badRequest(error);
   }
 }

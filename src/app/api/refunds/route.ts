@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { createInstance } from "@/server/workflow/engine";
+import { notFound, unauthorized } from "@/server/shared/api";
 
 // 获取退款列表
 export async function GET() {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!session) return unauthorized();
 
   const refunds = await prisma.refund.findMany({
     include: {
@@ -23,14 +24,14 @@ export async function GET() {
 // 申请退款
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!session) return unauthorized();
 
-  const userId = (session.user as any).id;
+  const userId = session.user.id;
   const { orderId, reason, amount } = await req.json();
 
   // 校验订单是否存在
   const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return NextResponse.json({ error: "订单不存在" }, { status: 404 });
+  if (!order) return notFound(new Error("订单不存在"));
 
   // 创建退款单
   const refund = await prisma.refund.create({

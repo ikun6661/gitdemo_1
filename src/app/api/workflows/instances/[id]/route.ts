@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getInstance } from "@/server/workflow/engine";
 import { auth } from "@/lib/auth";
+import { notFound, unauthorized } from "@/server/shared/api";
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: RouteContext<"/api/workflows/instances/[id]">) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!session) return unauthorized();
   try {
-    const { id } = await params;
+    const { id } = await ctx.params;
     const instance = await getInstance(id);
     return NextResponse.json(instance);
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 404 });
+  } catch (error: unknown) {
+    return notFound(error);
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { createInstance } from "@/server/workflow/engine";
+import { badRequest, unauthorized } from "@/server/shared/api";
 
 // 生成订单号
 function generateOrderNo(): string {
@@ -14,11 +15,11 @@ function generateOrderNo(): string {
 // 获取订单列表（客户只能看自己的；管理员看全部）
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!session) return unauthorized();
 
   const { searchParams } = new URL(req.url);
-  const userId = (session.user as any).id;
-  const role = (session.user as any).role;
+  const userId = session.user.id;
+  const role = session.user.role;
 
   const where: Record<string, unknown> = {};
   if (role === "customer") where.userId = userId;
@@ -39,9 +40,9 @@ export async function GET(req: NextRequest) {
 // 创建订单（从购物车结算）
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!session) return unauthorized();
 
-  const userId = (session.user as any).id;
+  const userId = session.user.id;
   const body = await req.json();
   const { address, cartItemIds } = body;
 
@@ -65,15 +66,16 @@ export async function POST(req: NextRequest) {
     productId: string;
     quantity: number;
     unitPrice: number;
-    snapshot: any;
+    snapshot: {
+      name: string;
+      price: number;
+      images: string;
+    };
   }[] = [];
 
   for (const item of cartItems) {
     if (item.product.stock < item.quantity) {
-      return NextResponse.json(
-        { error: `${item.product.name} 库存不足` },
-        { status: 400 }
-      );
+      return badRequest(new Error(`${item.product.name} 库存不足`));
     }
     totalAmount += item.product.price * item.quantity;
     orderItems.push({
