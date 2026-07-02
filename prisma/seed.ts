@@ -8,6 +8,7 @@ async function main() {
   await prisma.workflowLog.deleteMany();
   await prisma.workflowInstance.deleteMany();
   await prisma.workflow.deleteMany();
+  await prisma.payment.deleteMany();
   await prisma.refund.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
@@ -53,74 +54,108 @@ async function main() {
     },
   });
 
-  await Promise.all([
-    prisma.product.create({
-      data: {
-        name: "iPhone 15",
-        description: "Apple iPhone 15 128GB 黑色",
-        price: 699900,
-        stock: 100,
-        categoryId: electronics.id,
-        images: JSON.stringify(["/placeholder-iphone.jpg"]),
-        status: "published",
-      },
-    }),
-    prisma.product.create({
-      data: {
-        name: "MacBook Air",
-        description: "Apple MacBook Air M3 13英寸 8GB/256GB",
-        price: 899900,
-        stock: 50,
-        categoryId: electronics.id,
-        images: JSON.stringify(["/placeholder-macbook.jpg"]),
-        status: "published",
-      },
-    }),
-    prisma.product.create({
-      data: {
-        name: "AirPods Pro",
-        description: "Apple AirPods Pro 第二代 USB-C",
-        price: 189900,
-        stock: 200,
-        categoryId: electronics.id,
-        images: JSON.stringify(["/placeholder-airpods.jpg"]),
-        status: "published",
-      },
-    }),
-    prisma.product.create({
-      data: {
-        name: "iPad Air",
-        description: "Apple iPad Air M2 11英寸 128GB",
-        price: 479900,
-        stock: 80,
-        categoryId: electronics.id,
-        images: JSON.stringify(["/placeholder-ipad.jpg"]),
-        status: "published",
-      },
-    }),
-    prisma.product.create({
-      data: {
-        name: "Apple Watch",
-        description: "Apple Watch Series 9 GPS 45mm",
-        price: 319900,
-        stock: 150,
-        categoryId: electronics.id,
-        images: JSON.stringify(["/placeholder-watch.jpg"]),
-        status: "published",
-      },
-    }),
-    prisma.product.create({
-      data: {
-        name: "AirPods Max",
-        description: "Apple AirPods Max 头戴式耳机",
-        price: 439900,
-        stock: 30,
-        categoryId: electronics.id,
-        images: JSON.stringify(["/placeholder-airpodsmax.jpg"]),
-        status: "pending",
-      },
-    }),
-  ]);
+  const products = [
+    {
+      name: "iPhone 15",
+      description: "Apple iPhone 15 128GB 黑色，适合日常拍照、视频和轻办公。",
+      shortDescription: "轻巧耐用的 Apple 主力手机",
+      price: 699900,
+      stock: 100,
+      images: ["/placeholder-iphone.jpg"],
+      status: "published",
+      sellingPoints: ["A16 仿生芯片", "4800 万像素主摄", "USB-C 接口"],
+      specs: { storage: "128GB", color: "黑色", screen: "6.1 英寸" },
+      seoKeywords: ["iPhone 15", "Apple 手机", "数码电子"],
+      aiSummary: "适合想要稳定体验和优秀影像能力的主力机用户。",
+    },
+    {
+      name: "MacBook Air M3",
+      description: "Apple MacBook Air M3 13 英寸 8GB/256GB，适合学习、办公和轻量创作。",
+      shortDescription: "轻薄长续航的 M3 笔记本",
+      price: 899900,
+      stock: 50,
+      images: ["/placeholder-macbook.jpg"],
+      status: "published",
+      sellingPoints: ["M3 芯片", "轻薄机身", "全天候续航"],
+      specs: { memory: "8GB", storage: "256GB", screen: "13 英寸" },
+      seoKeywords: ["MacBook Air", "M3 笔记本", "轻薄本"],
+      aiSummary: "适合需要便携办公和稳定续航的学生与职场用户。",
+    },
+    {
+      name: "AirPods Pro 2",
+      description: "Apple AirPods Pro 第二代 USB-C，支持主动降噪和空间音频。",
+      shortDescription: "降噪表现优秀的真无线耳机",
+      price: 189900,
+      stock: 200,
+      images: ["/placeholder-airpods.jpg"],
+      status: "published",
+      sellingPoints: ["主动降噪", "空间音频", "USB-C 充电盒"],
+      specs: { connector: "USB-C", noiseCanceling: "主动降噪" },
+      seoKeywords: ["AirPods Pro", "降噪耳机", "无线耳机"],
+      aiSummary: "适合通勤、办公和 Apple 生态用户的高品质耳机。",
+    },
+    {
+      name: "iPad Air M2",
+      description: "Apple iPad Air M2 11 英寸 128GB，适合学习、绘画和移动办公。",
+      shortDescription: "性能强劲的轻薄平板",
+      price: 479900,
+      stock: 80,
+      images: ["/placeholder-ipad.jpg"],
+      status: "published",
+      sellingPoints: ["M2 芯片", "支持 Apple Pencil", "11 英寸 Liquid Retina 屏"],
+      specs: { storage: "128GB", chip: "M2", screen: "11 英寸" },
+      seoKeywords: ["iPad Air", "M2 平板", "Apple 平板"],
+      aiSummary: "适合学习、创作和娱乐之间灵活切换的用户。",
+    },
+    {
+      name: "Apple Watch Series 9",
+      description: "Apple Watch Series 9 GPS 45mm，支持健康监测和运动记录。",
+      shortDescription: "健康与运动管理智能手表",
+      price: 319900,
+      stock: 150,
+      images: ["/placeholder-watch.jpg"],
+      status: "published",
+      sellingPoints: ["健康监测", "运动记录", "明亮显示屏"],
+      specs: { size: "45mm", connectivity: "GPS" },
+      seoKeywords: ["Apple Watch", "智能手表", "运动手表"],
+      aiSummary: "适合重视健康提醒和运动记录的 Apple 用户。",
+    },
+    {
+      name: "AirPods Max",
+      description: "Apple AirPods Max 头戴式耳机，适合沉浸式音乐和影音体验。",
+      shortDescription: "高端头戴式降噪耳机",
+      price: 439900,
+      stock: 30,
+      images: ["/placeholder-airpodsmax.jpg"],
+      status: "pending",
+      sellingPoints: ["高保真音质", "主动降噪", "舒适头戴设计"],
+      specs: { type: "头戴式", noiseCanceling: "主动降噪" },
+      seoKeywords: ["AirPods Max", "头戴耳机", "高端耳机"],
+      aiSummary: "适合追求沉浸式听感和高级质感的用户。",
+    },
+  ];
+
+  await Promise.all(
+    products.map((product) =>
+      prisma.product.create({
+        data: {
+          name: product.name,
+          description: product.description,
+          shortDescription: product.shortDescription,
+          price: product.price,
+          stock: product.stock,
+          categoryId: electronics.id,
+          images: JSON.stringify(product.images),
+          status: product.status,
+          sellingPoints: JSON.stringify(product.sellingPoints),
+          specs: JSON.stringify(product.specs),
+          seoKeywords: JSON.stringify(product.seoKeywords),
+          aiSummary: product.aiSummary,
+          aiGeneratedAt: new Date(),
+        },
+      }),
+    ),
+  );
   console.log("商品创建完成");
 
   await prisma.workflow.create({
