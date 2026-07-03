@@ -7,9 +7,13 @@ import {
 import { badRequest, errorResponse } from "@/server/shared/api";
 import { transition } from "@/server/workflow/engine";
 
+type RouteParamsContext = {
+  params: Promise<{ id: string }>;
+};
+
 export async function POST(
   req: NextRequest,
-  ctx: RouteContext<"/api/workflows/instances/[id]/transition">
+  ctx: RouteParamsContext
 ) {
   try {
     const user = await requireStaff();
