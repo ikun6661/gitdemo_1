@@ -71,6 +71,23 @@ describe("POST /api/cart", () => {
     expect(mocks.cartItemUpdate).not.toHaveBeenCalled();
   });
 
+  it("数量不是正整数时拒绝写入购物车", async () => {
+    const response = await POST(
+      new NextRequest("http://test.local/api/cart", {
+        method: "POST",
+        body: JSON.stringify({
+          productId: "product-1",
+          quantity: -1,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.productFindFirst).not.toHaveBeenCalled();
+    expect(mocks.cartItemCreate).not.toHaveBeenCalled();
+    expect(mocks.cartItemUpdate).not.toHaveBeenCalled();
+  });
+
   it("published 商品可以加入购物车", async () => {
     mocks.productFindFirst.mockResolvedValue({ id: "product-1" });
     mocks.cartItemFindUnique.mockResolvedValue(null);

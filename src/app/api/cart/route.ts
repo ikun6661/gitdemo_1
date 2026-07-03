@@ -26,6 +26,11 @@ export async function POST(req: NextRequest) {
 
     const { productId, quantity } = await req.json();
     const userId = user.id;
+    const nextQuantity = quantity ?? 1;
+
+    if (!Number.isInteger(nextQuantity) || nextQuantity <= 0) {
+      return badRequest(new Error("商品数量无效"));
+    }
 
     const product = await prisma.product.findFirst({
       where: { id: productId, status: "published" },
@@ -43,13 +48,13 @@ export async function POST(req: NextRequest) {
     if (existing) {
       const item = await prisma.cartItem.update({
         where: { id: existing.id },
-        data: { quantity: existing.quantity + (quantity ?? 1) },
+        data: { quantity: existing.quantity + nextQuantity },
       });
       return NextResponse.json(item);
     }
 
     const item = await prisma.cartItem.create({
-      data: { userId, productId, quantity: quantity ?? 1 },
+      data: { userId, productId, quantity: nextQuantity },
     });
     return NextResponse.json(item, { status: 201 });
   } catch (error: unknown) {

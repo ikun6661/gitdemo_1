@@ -135,6 +135,38 @@ describe("POST /api/orders", () => {
     });
   });
 
+  it("旧购物车数量无效时返回 400 且不进入事务", async () => {
+    mocks.cartItemFindMany.mockResolvedValue([
+      {
+        id: "cart-1",
+        quantity: -1,
+        product: {
+          id: "product-1",
+          name: "Phone",
+          price: 100,
+          stock: 5,
+          status: "published",
+          images: "[]",
+        },
+      },
+    ]);
+
+    const response = await POST(
+      new NextRequest("http://test.local/api/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          address: { name: "Customer" },
+          cartItemIds: ["cart-1"],
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.productUpdate).not.toHaveBeenCalled();
+    expect(mocks.cartItemDeleteMany).not.toHaveBeenCalled();
+  });
+
   it("旧购物车里的 draft 商品结算时返回 400 且不进入事务", async () => {
     mocks.cartItemFindMany.mockResolvedValue([
       {

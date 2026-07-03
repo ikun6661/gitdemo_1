@@ -80,6 +80,10 @@ export async function POST(req: NextRequest) {
     }[] = [];
 
     for (const item of cartItems) {
+      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+        return badRequest(new Error("购物车项目数量无效"));
+      }
+
       if (item.product.status !== "published") {
         return badRequest(new Error("商品不可购买"));
       }
