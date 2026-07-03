@@ -1,12 +1,20 @@
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
-import { requireStaff } from "@/server/auth/guards";
+import {
+  AuthRequiredError,
+  PermissionDeniedError,
+  requireStaff,
+} from "@/server/auth/guards";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   try {
     await requireStaff();
-  } catch {
-    redirect("/login?callbackUrl=/dashboard");
+  } catch (error: unknown) {
+    if (error instanceof AuthRequiredError || error instanceof PermissionDeniedError) {
+      redirect("/login?callbackUrl=/dashboard");
+    }
+
+    throw error;
   }
 
   return (

@@ -19,10 +19,8 @@ export async function Header() {
                 <>
                   <Link href="/dashboard" className="text-sm hover:underline">看板</Link>
                   <Link href="/demo" className="text-sm hover:underline">演示</Link>
+                  <Link href="/admin/products" className="text-sm hover:underline">管理</Link>
                 </>
-              )}
-              {user.role === "admin" && (
-                <Link href="/admin/products" className="text-sm hover:underline">管理</Link>
               )}
               <span className="text-sm text-gray-500">{user.name}</span>
               <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>

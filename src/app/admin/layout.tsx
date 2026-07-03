@@ -1,14 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { requireStaff } from "@/server/auth/guards";
+import {
+  AuthRequiredError,
+  PermissionDeniedError,
+  requireStaff,
+} from "@/server/auth/guards";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  let user;
+  let user: Awaited<ReturnType<typeof requireStaff>>;
   try {
     user = await requireStaff();
-  } catch {
-    redirect("/login?callbackUrl=/admin/products");
+  } catch (error: unknown) {
+    if (error instanceof AuthRequiredError || error instanceof PermissionDeniedError) {
+      redirect("/login?callbackUrl=/admin/products");
+    }
+
+    throw error;
   }
 
   return (
