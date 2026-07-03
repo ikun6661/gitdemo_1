@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   canAccessAdmin,
   isUserRole,
@@ -23,17 +24,24 @@ export class PermissionDeniedError extends Error {
 export async function requireAuth(): Promise<AuthUser> {
   const session = await auth();
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     throw new AuthRequiredError();
   }
 
-  if (!isUserRole(session.user.role)) {
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, name: true, email: true, role: true },
+  });
+
+  if (!user || !isUserRole(user.role)) {
     throw new PermissionDeniedError();
   }
 
   return {
-    ...session.user,
-    role: session.user.role,
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
   };
 }
 

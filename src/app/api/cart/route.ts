@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/server/auth/guards";
-import { errorResponse } from "@/server/shared/api";
+import { badRequest, errorResponse } from "@/server/shared/api";
 
 // 获取当前用户的购物车
 export async function GET() {
@@ -26,6 +26,15 @@ export async function POST(req: NextRequest) {
 
     const { productId, quantity } = await req.json();
     const userId = user.id;
+
+    const product = await prisma.product.findFirst({
+      where: { id: productId, status: "published" },
+      select: { id: true },
+    });
+
+    if (!product) {
+      return badRequest(new Error("商品不可购买"));
+    }
 
     const existing = await prisma.cartItem.findUnique({
       where: { userId_productId: { userId, productId } },

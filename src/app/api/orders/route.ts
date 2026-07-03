@@ -80,6 +80,10 @@ export async function POST(req: NextRequest) {
     }[] = [];
 
     for (const item of cartItems) {
+      if (item.product.status !== "published") {
+        return badRequest(new Error("商品不可购买"));
+      }
+
       if (item.product.stock < item.quantity) {
         return badRequest(new Error(`${item.product.name} 库存不足`));
       }
