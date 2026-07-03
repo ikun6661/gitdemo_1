@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+// ========== 用户 ==========
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("customer") // admin | operator | customer
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orders    Order[]
+  payments  Payment[]
+  refunds   Refund[]
+  accounts  Account[]
+  sessions  Session[]
+  cartItems CartItem[]
+
+  @@map("users")
+}
+
+// NextAuth.js 所需表
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ========== 商品 ==========
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  parentId  String?  @map("parent_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  shortDescription String   @default("") @map("short_description")
+  sellingPoints    String   @default("[]") @map("selling_points")
+  specs            String   @default("{}")
+  seoKeywords      String   @default("[]") @map("seo_keywords")
+  aiSummary        String   @default("") @map("ai_summary")
+  aiGeneratedAt    DateTime? @map("ai_generated_at")
+  price       Int // 以分为单位
+  stock       Int      @default(0)
+  images      String     @default("[]")
+  categoryId  String   @map("category_id")
+  status      String   @default("draft") // draft | pending | published
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  category   Category    @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@map("products")
+}
+
+// ========== 购物车 ==========
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+// ========== 订单 ==========
+model Order {
+  id          String   @id @default(cuid())
+  orderNo     String   @unique @map("order_no")
+  userId      String   @map("user_id")
+  totalAmount Int      @map("total_amount")
+  address     String     @default("{}")
+  status      String   @default("pending_payment")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user              User               @relation(fields: [userId], references: [id])
+  items             OrderItem[]
+  refunds           Refund[]
+  payments          Payment[]
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String @map("order_id")
+  productId String @map("product_id")
+  quantity  Int
+  unitPrice Int    @map("unit_price")
+  snapshot  String   @default("{}")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Payment {
+  id            String    @id @default(cuid())
+  orderId       String    @map("order_id")
+  userId        String    @map("user_id")
+  amount        Int
+  provider      String    @default("mock")
+  status        String    @default("pending")
+  transactionNo String?   @map("transaction_no")
+  rawPayload    String    @default("{}") @map("raw_payload")
+  paidAt        DateTime? @map("paid_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([userId])
+  @@unique([transactionNo])
+  @@map("payments")
+}
+
+// ========== 退款 ==========
+model Refund {
+  id        String   @id @default(cuid())
+  orderId   String   @map("order_id")
+  userId    String   @map("user_id")
+  reason    String
+  amount    Int
+  status    String   @default("pending")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  order             Order              @relation(fields: [orderId], references: [id])
+  user              User               @relation(fields: [userId], references: [id])
+  @@map("refunds")
+}
+
+// ========== 工作流引擎 ==========
+model Workflow {
+  id        String   @id @default(cuid())
+  name      String
+  type      String // order_flow | refund_approval | product_approval
+  nodes     String     @default("[]")
+  edges     String     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  instances WorkflowInstance[]
+
+  @@map("workflows")
+}
+
+model WorkflowInstance {
+  id          String    @id @default(cuid())
+  workflowId  String    @map("workflow_id")
+  currentNode String    @map("current_node")
+  status      String    @default("running") // running | completed | cancelled
+  targetType  String    @map("target_type") // order | refund | product
+  targetId    String    @map("target_id")
+  context     String      @default("{}")
+  startedAt   DateTime? @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workflow Workflow      @relation(fields: [workflowId], references: [id])
+  logs     WorkflowLog[]
+
+  @@map("workflow_instances")
+}
+
+model WorkflowLog {
+  id         String   @id @default(cuid())
+  instanceId String   @map("instance_id")
+  fromNode   String   @map("from_node")
+  toNode     String   @map("to_node")
+  operator   String   @default("system")
+  action     String
+  comment    String   @default("")
+  metadata   String     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_logs")
+}
