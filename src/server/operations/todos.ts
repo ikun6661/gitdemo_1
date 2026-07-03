@@ -151,15 +151,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseRecord(value: string | Record<string, unknown>): Record<string, unknown> {
   if (typeof value !== "string") return value;
 
-  const parsed: unknown = JSON.parse(value);
-  return isRecord(parsed) ? parsed : {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function parseArray<T>(value: string | T[]): T[] {
   if (Array.isArray(value)) return value;
 
-  const parsed: unknown = JSON.parse(value);
-  return Array.isArray(parsed) ? (parsed as T[]) : [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function normalizeInstance(

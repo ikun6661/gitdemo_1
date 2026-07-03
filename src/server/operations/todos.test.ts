@@ -260,6 +260,44 @@ describe("operations todos", () => {
     ]);
   });
 
+  it("listOpsTodos tolerates malformed workflow JSON and keeps valid todos", async () => {
+    mocks.workflowInstanceFindMany.mockResolvedValue([
+      {
+        ...orderInstance,
+        id: "workflow-order-bad-context",
+        currentNode: "pending_payment",
+        context: "{bad json",
+        workflow: {
+          ...orderInstance.workflow,
+          nodes: JSON.stringify(orderInstance.workflow.nodes),
+          edges: JSON.stringify(orderInstance.workflow.edges),
+        },
+      },
+      {
+        ...refundInstance,
+        id: "workflow-refund-bad-nodes",
+        currentNode: "waiting_for_unknown_step",
+        context: JSON.stringify(refundInstance.context),
+        workflow: {
+          ...refundInstance.workflow,
+          nodes: "{bad json",
+          edges: JSON.stringify(refundInstance.workflow.edges),
+        },
+      },
+    ]);
+    mocks.productFindMany.mockResolvedValue([pendingProduct]);
+
+    await expect(listOpsTodos({})).resolves.toMatchObject({
+      summary: {
+        total: 1,
+        orders: 0,
+        refunds: 0,
+        products: 1,
+      },
+      todos: [{ id: "product:product-1", type: "product" }],
+    });
+  });
+
   it("order ship 会调用 transition 并更新 order status", async () => {
     mocks.workflowInstanceFindUnique.mockResolvedValue({
       id: "workflow-order-1",
