@@ -67,6 +67,19 @@ describe("POST /api/ops/todos/[id]/action", () => {
     expect(mocks.performOpsTodoAction).not.toHaveBeenCalled();
   });
 
+  it("JSON body 无效时返回 400 且不调用 service", async () => {
+    const response = await POST(
+      new NextRequest("http://test.local/api/ops/todos/order:todo-1/action", {
+        method: "POST",
+        body: "{",
+      }),
+      { params: Promise.resolve({ id: "order:todo-1" }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.performOpsTodoAction).not.toHaveBeenCalled();
+  });
+
   it("非 staff 返回 403 且不调用 service", async () => {
     mocks.requireStaff.mockRejectedValue(new mocks.PermissionDeniedError());
 
@@ -83,8 +96,8 @@ describe("POST /api/ops/todos/[id]/action", () => {
     expect(mocks.performOpsTodoAction).not.toHaveBeenCalled();
   });
 
-  it("performOpsTodoAction 抛普通 Error 时返回 400", async () => {
-    mocks.performOpsTodoAction.mockRejectedValue(new Error("动作无效"));
+  it("performOpsTodoAction 抛业务 Error 时返回 400", async () => {
+    mocks.performOpsTodoAction.mockRejectedValue(new Error("订单动作无效"));
 
     const response = await POST(
       new NextRequest("http://test.local/api/ops/todos/order:todo-1/action", {
@@ -96,12 +109,30 @@ describe("POST /api/ops/todos/[id]/action", () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body).toEqual({ error: "动作无效" });
+    expect(body).toEqual({ error: "订单动作无效" });
     expect(mocks.performOpsTodoAction).toHaveBeenCalledWith({
       todoId: "order:todo-1",
       action: "invalid",
       comment: "",
       operator: "王运营",
     });
+  });
+
+  it("performOpsTodoAction 抛未知系统错误时返回 500 且不泄露内部消息", async () => {
+    mocks.performOpsTodoAction.mockRejectedValue(
+      new Error("database password leaked"),
+    );
+
+    const response = await POST(
+      new NextRequest("http://test.local/api/ops/todos/order:todo-1/action", {
+        method: "POST",
+        body: JSON.stringify({ action: "ship" }),
+      }),
+      { params: Promise.resolve({ id: "order:todo-1" }) },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(body)).not.toContain("database password leaked");
   });
 });

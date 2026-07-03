@@ -11,11 +11,32 @@ type RouteParamsContext = {
   params: Promise<{ id: string }>;
 };
 
+const businessErrorMessages = new Set([
+  "待办 ID 无效",
+  "待办不存在",
+  "待办已处理",
+  "订单动作无效",
+  "退款动作无效",
+  "退款单不存在",
+  "商品动作无效",
+  "商品待办不存在",
+]);
+
+function isBusinessError(error: unknown): error is Error {
+  return error instanceof Error && businessErrorMessages.has(error.message);
+}
+
 export async function POST(req: NextRequest, ctx: RouteParamsContext) {
   try {
     const user = await requireStaff();
     const { id } = await ctx.params;
-    const body: unknown = await req.json();
+    let body: unknown;
+
+    try {
+      body = await req.json();
+    } catch {
+      return badRequest(new Error("JSON body 无效"));
+    }
 
     if (
       typeof body !== "object" ||
@@ -46,6 +67,10 @@ export async function POST(req: NextRequest, ctx: RouteParamsContext) {
       return errorResponse(error);
     }
 
-    return badRequest(error);
+    if (isBusinessError(error)) {
+      return badRequest(error);
+    }
+
+    return errorResponse(error);
   }
 }
