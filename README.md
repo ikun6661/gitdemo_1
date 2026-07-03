@@ -2,6 +2,13 @@
 
 AI 电商练习项目，当前基线使用 Next.js、Prisma、PostgreSQL、NextAuth 和 Vitest。
 
+## 当前能力
+
+- PostgreSQL + Prisma 数据模型包含用户、商品、购物车、订单、支付记录、退款和工作流。
+- NextAuth credentials 登录，支持 `customer`、`operator`、`admin` 三类角色。
+- 后台入口和关键 API 使用服务端权限校验。
+- 商品数据包含 AI 商品运营预留字段，后续可接入真实 AI 文案生成。
+
 ## 本地开发
 
 1. 安装依赖：
@@ -49,9 +56,11 @@ AI 电商练习项目，当前基线使用 Next.js、Prisma、PostgreSQL、NextA
 
 演示账号密码均为 `demo123456`：
 
-- `admin@ecomflow.com`
-- `operator@ecomflow.com`
-- `customer@ecomflow.com`
+| 角色 | 邮箱 | 默认入口 |
+| --- | --- | --- |
+| 管理员 | `admin@ecomflow.com` | `/dashboard` |
+| 运营 | `operator@ecomflow.com` | `/dashboard` |
+| 顾客 | `customer@ecomflow.com` | `/products` |
 
 ## 常用命令
 
