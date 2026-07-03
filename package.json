@@ -12,7 +12,12 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "prisma:deploy": "prisma migrate deploy",
+    "deploy:build": "docker compose -f docker-compose.prod.yml --env-file .env.production build",
+    "deploy:up": "docker compose -f docker-compose.prod.yml --env-file .env.production up -d",
+    "deploy:down": "docker compose -f docker-compose.prod.yml --env-file .env.production down",
+    "deploy:logs": "docker compose -f docker-compose.prod.yml --env-file .env.production logs -f app"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

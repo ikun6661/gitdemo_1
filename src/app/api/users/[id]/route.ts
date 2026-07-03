@@ -3,7 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, parseUserRole } from "@/server/auth/guards";
 import { badRequest, errorResponse } from "@/server/shared/api";
 
-export async function PUT(req: NextRequest, ctx: RouteContext<"/api/users/[id]">) {
+type RouteParamsContext = {
+  params: Promise<{ id: string }>;
+};
+
+export async function PUT(req: NextRequest, ctx: RouteParamsContext) {
   try {
     await requireAdmin();
     const { id } = await ctx.params;

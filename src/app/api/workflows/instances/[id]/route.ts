@@ -7,9 +7,13 @@ import {
 import { errorResponse, notFound } from "@/server/shared/api";
 import { getInstance } from "@/server/workflow/engine";
 
+type RouteParamsContext = {
+  params: Promise<{ id: string }>;
+};
+
 export async function GET(
   req: NextRequest,
-  ctx: RouteContext<"/api/workflows/instances/[id]">
+  ctx: RouteParamsContext
 ) {
   try {
     await requireStaff();

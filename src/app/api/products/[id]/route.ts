@@ -24,6 +24,10 @@ const updateSchema = z.object({
   status: z.enum(PRODUCT_STATUSES).optional(),
 });
 
+type RouteParamsContext = {
+  params: Promise<{ id: string }>;
+};
+
 async function canReadUnpublishedProducts(): Promise<boolean> {
   try {
     await requireStaff();
@@ -42,7 +46,7 @@ async function canReadUnpublishedProducts(): Promise<boolean> {
 
 export async function GET(
   req: NextRequest,
-  ctx: RouteContext<"/api/products/[id]">
+  ctx: RouteParamsContext
 ) {
   try {
     const isStaff = await canReadUnpublishedProducts();
@@ -64,7 +68,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  ctx: RouteContext<"/api/products/[id]">
+  ctx: RouteParamsContext
 ) {
   try {
     await requireStaff();
@@ -94,7 +98,7 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  ctx: RouteContext<"/api/products/[id]">
+  ctx: RouteParamsContext
 ) {
   try {
     await requireStaff();
