@@ -1,11 +1,19 @@
 import Link from "next/link";
-import { auth, signOut } from "@/lib/auth";
+import { signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { AuthRequiredError, requireAuth } from "@/server/auth/guards";
 import { isStaffRole } from "@/types/auth";
 
 export async function Header() {
-  const session = await auth();
-  const user = session?.user;
+  let user: Awaited<ReturnType<typeof requireAuth>> | null = null;
+
+  try {
+    user = await requireAuth();
+  } catch (error: unknown) {
+    if (!(error instanceof AuthRequiredError)) {
+      throw error;
+    }
+  }
 
   return (
     <header className="border-b bg-white">
