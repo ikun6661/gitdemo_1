@@ -7,18 +7,34 @@ import {
   performOpsTodoAction,
 } from "./todos";
 
-const mocks = vi.hoisted(() => ({
-  orderUpdate: vi.fn(),
-  productFindMany: vi.fn(),
-  productFindUnique: vi.fn(),
-  productUpdate: vi.fn(),
-  refundFindUnique: vi.fn(),
-  refundUpdate: vi.fn(),
-  transaction: vi.fn(),
-  transition: vi.fn(),
-  workflowInstanceFindMany: vi.fn(),
-  workflowInstanceFindUnique: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  const txOrderUpdate = vi.fn();
+  const txRefundFindUnique = vi.fn();
+  const txRefundUpdate = vi.fn();
+
+  return {
+    orderUpdate: vi.fn(),
+    productFindMany: vi.fn(),
+    productFindUnique: vi.fn(),
+    productUpdate: vi.fn(),
+    refundFindUnique: vi.fn(),
+    refundUpdate: vi.fn(),
+    transaction: vi.fn(),
+    transactionClient: {
+      order: { update: txOrderUpdate },
+      refund: {
+        findUnique: txRefundFindUnique,
+        update: txRefundUpdate,
+      },
+    },
+    transition: vi.fn(),
+    txOrderUpdate,
+    txRefundFindUnique,
+    txRefundUpdate,
+    workflowInstanceFindMany: vi.fn(),
+    workflowInstanceFindUnique: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -121,13 +137,7 @@ describe("operations todos", () => {
     mocks.workflowInstanceFindUnique.mockResolvedValue(null);
     mocks.productFindMany.mockResolvedValue([]);
     mocks.transaction.mockImplementation(async (callback) =>
-      callback({
-        order: { update: mocks.orderUpdate },
-        refund: {
-          findUnique: mocks.refundFindUnique,
-          update: mocks.refundUpdate,
-        },
-      }),
+      callback(mocks.transactionClient),
     );
   });
 
@@ -276,16 +286,21 @@ describe("operations todos", () => {
       where: { id: "workflow-order-1" },
       select: { targetId: true, targetType: true, status: true },
     });
-    expect(mocks.transition).toHaveBeenCalledWith({
-      instanceId: "workflow-order-1",
-      trigger: "ship",
-      operator: "运营小王",
-      comment: "",
-    });
-    expect(mocks.orderUpdate).toHaveBeenCalledWith({
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.transition).toHaveBeenCalledWith(
+      {
+        instanceId: "workflow-order-1",
+        trigger: "ship",
+        operator: "运营小王",
+        comment: "",
+      },
+      mocks.transactionClient,
+    );
+    expect(mocks.txOrderUpdate).toHaveBeenCalledWith({
       where: { id: "order-1" },
       data: { status: "shipped" },
     });
+    expect(mocks.orderUpdate).not.toHaveBeenCalled();
   });
 
   it("manager_approve 退款会更新 refund approved 和 order refunded", async () => {
@@ -295,7 +310,7 @@ describe("operations todos", () => {
       targetType: "refund",
       status: "running",
     });
-    mocks.refundFindUnique.mockResolvedValue({
+    mocks.txRefundFindUnique.mockResolvedValue({
       id: "refund-1",
       orderId: "order-1",
       status: "pending",
@@ -315,24 +330,59 @@ describe("operations todos", () => {
       }),
     ).resolves.toEqual({ success: true });
 
-    expect(mocks.refundFindUnique).toHaveBeenCalledWith({
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.txRefundFindUnique).toHaveBeenCalledWith({
       where: { id: "refund-1" },
       select: { orderId: true },
     });
-    expect(mocks.transition).toHaveBeenCalledWith({
-      instanceId: "workflow-refund-1",
-      trigger: "manager_approve",
-      operator: "运营小王",
-      comment: "",
-    });
-    expect(mocks.refundUpdate).toHaveBeenCalledWith({
+    expect(mocks.transition).toHaveBeenCalledWith(
+      {
+        instanceId: "workflow-refund-1",
+        trigger: "manager_approve",
+        operator: "运营小王",
+        comment: "",
+      },
+      mocks.transactionClient,
+    );
+    expect(mocks.txRefundUpdate).toHaveBeenCalledWith({
       where: { id: "refund-1" },
       data: { status: "approved" },
     });
-    expect(mocks.orderUpdate).toHaveBeenCalledWith({
+    expect(mocks.txOrderUpdate).toHaveBeenCalledWith({
       where: { id: "order-1" },
       data: { status: "refunded" },
     });
+    expect(mocks.refundFindUnique).not.toHaveBeenCalled();
+    expect(mocks.refundUpdate).not.toHaveBeenCalled();
+    expect(mocks.orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refund target 不存在时不调用 transition", async () => {
+    mocks.workflowInstanceFindUnique.mockResolvedValue({
+      id: "workflow-refund-1",
+      targetId: "refund-missing",
+      targetType: "refund",
+      status: "running",
+    });
+    mocks.txRefundFindUnique.mockResolvedValue(null);
+
+    await expect(
+      performOpsTodoAction({
+        todoId: "refund:workflow-refund-1",
+        action: "manager_reject",
+        operator: "运营小王",
+        comment: "资料不足",
+      }),
+    ).rejects.toThrow("退款单不存在");
+
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.txRefundFindUnique).toHaveBeenCalledWith({
+      where: { id: "refund-missing" },
+      select: { orderId: true },
+    });
+    expect(mocks.transition).not.toHaveBeenCalled();
+    expect(mocks.txRefundUpdate).not.toHaveBeenCalled();
+    expect(mocks.txOrderUpdate).not.toHaveBeenCalled();
   });
 
   it("product reject 会更新 product rejected 且不调用 transition", async () => {

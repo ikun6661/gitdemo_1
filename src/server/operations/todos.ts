@@ -400,15 +400,20 @@ export async function performOpsTodoAction(
     if (input.action !== "ship") throw new Error("订单动作无效");
 
     const orderId = await getRunningWorkflowTarget(id, "order");
-    await transition({
-      instanceId: id,
-      trigger: "ship",
-      operator: input.operator,
-      comment,
-    });
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: "shipped" },
+    await prisma.$transaction(async (tx) => {
+      await transition(
+        {
+          instanceId: id,
+          trigger: "ship",
+          operator: input.operator,
+          comment,
+        },
+        tx,
+      );
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: "shipped" },
+      });
     });
 
     return { success: true };
@@ -433,42 +438,44 @@ export async function performOpsTodoAction(
       input.action === "cs_reject" ||
       input.action === "manager_reject";
 
-    const refund =
-      input.action === "manager_approve"
-        ? await prisma.refund.findUnique({
-            where: { id: refundId },
-            select: { orderId: true },
-          })
-        : null;
+    await prisma.$transaction(async (tx) => {
+      const refund = await tx.refund.findUnique({
+        where: { id: refundId },
+        select: { orderId: true },
+      });
 
-    if (input.action === "manager_approve" && !refund) {
-      throw new Error("退款单不存在");
-    }
+      if (!refund) {
+        throw new Error("退款单不存在");
+      }
 
-    await transition({
-      instanceId: id,
-      trigger: input.action,
-      operator: input.operator,
-      comment,
+      await transition(
+        {
+          instanceId: id,
+          trigger: input.action,
+          operator: input.operator,
+          comment,
+        },
+        tx,
+      );
+
+      if (shouldReject) {
+        await tx.refund.update({
+          where: { id: refundId },
+          data: { status: "rejected" },
+        });
+      }
+
+      if (input.action === "manager_approve") {
+        await tx.refund.update({
+          where: { id: refundId },
+          data: { status: "approved" },
+        });
+        await tx.order.update({
+          where: { id: refund.orderId },
+          data: { status: "refunded" },
+        });
+      }
     });
-
-    if (shouldReject) {
-      await prisma.refund.update({
-        where: { id: refundId },
-        data: { status: "rejected" },
-      });
-    }
-
-    if (input.action === "manager_approve" && refund) {
-      await prisma.refund.update({
-        where: { id: refundId },
-        data: { status: "approved" },
-      });
-      await prisma.order.update({
-        where: { id: refund.orderId },
-        data: { status: "refunded" },
-      });
-    }
 
     return { success: true };
   }

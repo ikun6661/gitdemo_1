@@ -1,10 +1,16 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   findNextEdge,
   isEndNode,
   parseWorkflowDefinition,
 } from "./definition";
 import type { CreateInstanceInput, TransitionInput, WorkflowEdge } from "./types";
+
+type WorkflowClient = Pick<
+  PrismaClient | Prisma.TransactionClient,
+  "workflowInstance" | "workflowLog"
+>;
 
 async function findWorkflowByType(type: string) {
   const workflow = await prisma.workflow.findFirst({ where: { type } });
@@ -47,8 +53,11 @@ export async function createInstance(input: CreateInstanceInput) {
   return instance;
 }
 
-export async function transition(input: TransitionInput) {
-  const instance = await prisma.workflowInstance.findUnique({
+export async function transition(
+  input: TransitionInput,
+  client: WorkflowClient = prisma,
+) {
+  const instance = await client.workflowInstance.findUnique({
     where: { id: input.instanceId },
     include: { workflow: true },
   });
@@ -72,7 +81,7 @@ export async function transition(input: TransitionInput) {
 
   const hasEnded = isEndNode(next.to, definition.edges);
 
-  const updated = await prisma.workflowInstance.update({
+  const updated = await client.workflowInstance.update({
     where: { id: instance.id },
     data: {
       currentNode: next.to,
@@ -81,7 +90,7 @@ export async function transition(input: TransitionInput) {
     },
   });
 
-  await prisma.workflowLog.create({
+  await client.workflowLog.create({
     data: {
       instanceId: instance.id,
       fromNode: next.from,
