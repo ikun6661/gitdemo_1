@@ -46,7 +46,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { address, cartItemIds } = body;
 
-    if (!Array.isArray(cartItemIds) || cartItemIds.length === 0) {
+    if (
+      !Array.isArray(cartItemIds) ||
+      cartItemIds.length === 0 ||
+      !cartItemIds.every((id) => typeof id === "string" && id.length > 0)
+    ) {
       return NextResponse.json({ error: "购物车为空" }, { status: 400 });
     }
 

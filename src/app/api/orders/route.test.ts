@@ -82,6 +82,22 @@ describe("POST /api/orders", () => {
     expect(mocks.cartItemDeleteMany).not.toHaveBeenCalled();
   });
 
+  it("购物车项 id 类型无效时返回 400 且不查询数据库", async () => {
+    const response = await POST(
+      new NextRequest("http://test.local/api/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          address: { name: "Customer" },
+          cartItemIds: ["cart-1", 123],
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.cartItemFindMany).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
   it("正常下单删除购物车时带上 userId", async () => {
     mocks.cartItemFindMany.mockResolvedValue([
       {
