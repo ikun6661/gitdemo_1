@@ -1,163 +1,427 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
-interface WorkflowNodeView {
+type OpsTodoAction = {
   key: string;
   label: string;
-}
-
-interface WorkflowEdgeView {
-  from: string;
-  to: string;
-  trigger: string;
-  label: string;
-}
-
-interface WorkflowLogView {
-  toNode: string;
-  action: string;
-  createdAt: string;
-}
-
-interface WorkflowInstanceView {
-  id: string;
-  currentNode: string;
-  status: string;
-  targetType: string;
-  targetId: string;
-  context: {
-    orderNo?: string;
-    [key: string]: unknown;
-  };
-  workflow: {
-    name: string;
-    nodes: WorkflowNodeView[];
-    edges: WorkflowEdgeView[];
-  };
-  logs: WorkflowLogView[];
-}
-
-interface WorkflowInstancesResponse {
-  instances: WorkflowInstanceView[];
-  total: number;
-}
-
-const nodeColors: Record<string, string> = {
-  pending_payment: "bg-yellow-100 text-yellow-800",
-  paid: "bg-blue-100 text-blue-800",
-  shipped: "bg-green-100 text-green-800",
-  received: "bg-purple-100 text-purple-800",
-  completed: "bg-gray-100 text-gray-800",
-  cancelled: "bg-red-100 text-red-800",
-  refunding: "bg-orange-100 text-orange-800",
-  refunded: "bg-pink-100 text-pink-800",
-  pending_review: "bg-yellow-100 text-yellow-800",
-  cs_review: "bg-blue-100 text-blue-800",
-  manager_approval: "bg-indigo-100 text-indigo-800",
-  approved: "bg-green-100 text-green-800",
-  rejected: "bg-red-100 text-red-800",
-  draft: "bg-gray-100 text-gray-800",
-  published: "bg-green-100 text-green-800",
+  variant: "default" | "outline" | "destructive";
+  requiresComment?: boolean;
 };
+
+type OpsTodo = {
+  id: string;
+  type: "order" | "refund" | "product";
+  title: string;
+  subtitle: string;
+  status: string;
+  statusLabel: string;
+  statusTone: "yellow" | "blue" | "green" | "red" | "gray" | "orange";
+  targetId: string;
+  workflowInstanceId?: string;
+  amount?: number;
+  customerName?: string;
+  createdAt: string;
+  actions: OpsTodoAction[];
+};
+
+type OpsTodoSummary = {
+  total: number;
+  orders: number;
+  refunds: number;
+  products: number;
+};
+
+type OpsTodoListResponse = {
+  summary: OpsTodoSummary;
+  todos: OpsTodo[];
+};
+
+type TodoTypeFilter = "all" | OpsTodo["type"];
+type TodoStatusFilter =
+  | "all"
+  | "paid"
+  | "pending_review"
+  | "cs_review"
+  | "manager_approval"
+  | "pending";
+
+const typeOptions: Array<{ value: TodoTypeFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "order", label: "订单" },
+  { value: "refund", label: "退款" },
+  { value: "product", label: "商品审核" },
+];
+
+const statusOptions: Array<{ value: TodoStatusFilter; label: string }> = [
+  { value: "all", label: "全部状态" },
+  { value: "paid", label: "已支付" },
+  { value: "pending_review", label: "待初审" },
+  { value: "cs_review", label: "客服审核" },
+  { value: "manager_approval", label: "经理审批" },
+  { value: "pending", label: "商品待审核" },
+];
+
+const typeLabels: Record<OpsTodo["type"], string> = {
+  order: "订单",
+  refund: "退款",
+  product: "商品审核",
+};
+
+const statusLabels: Record<string, string> = {
+  paid: "已支付",
+  pending_review: "待初审",
+  cs_review: "客服审核",
+  manager_approval: "经理审批",
+  pending: "商品待审核",
+};
+
+const typeClasses: Record<OpsTodo["type"], string> = {
+  order: "border-sky-200 bg-sky-50 text-sky-700",
+  refund: "border-rose-200 bg-rose-50 text-rose-700",
+  product: "border-emerald-200 bg-emerald-50 text-emerald-700",
+};
+
+const toneClasses: Record<OpsTodo["statusTone"], string> = {
+  yellow: "border-yellow-200 bg-yellow-50 text-yellow-800",
+  blue: "border-blue-200 bg-blue-50 text-blue-700",
+  green: "border-green-200 bg-green-50 text-green-700",
+  red: "border-red-200 bg-red-50 text-red-700",
+  gray: "border-gray-200 bg-gray-50 text-gray-700",
+  orange: "border-orange-200 bg-orange-50 text-orange-700",
+};
+
+const emptySummary: OpsTodoSummary = {
+  total: 0,
+  orders: 0,
+  refunds: 0,
+  products: 0,
+};
+
+function formatMoney(value?: number) {
+  if (value === undefined) return "未记录金额";
+
+  return `¥${(value / 100).toFixed(2)}`;
+}
+
+function formatTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "时间未知";
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+async function readApiError(response: Response) {
+  try {
+    const body = (await response.json()) as { error?: string };
+    return body.error || "操作失败";
+  } catch {
+    return "操作失败";
+  }
+}
+
+async function fetchOpsTodos(
+  type: TodoTypeFilter,
+  status: TodoStatusFilter,
+  search: string,
+) {
+  const params = new URLSearchParams();
+  const trimmedSearch = search.trim();
+
+  if (type !== "all") params.set("type", type);
+  if (status !== "all") params.set("status", status);
+  if (trimmedSearch.length > 0) params.set("search", trimmedSearch);
+
+  const query = params.toString();
+  const response = await fetch(`/api/ops/todos${query ? `?${query}` : ""}`);
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  return (await response.json()) as OpsTodoListResponse;
+}
+
+function getStatusLabel(todo: OpsTodo) {
+  return statusLabels[todo.status] ?? todo.statusLabel ?? todo.status;
+}
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("order_flow");
+  const [type, setType] = useState<TodoTypeFilter>("all");
+  const [status, setStatus] = useState<TodoStatusFilter>("all");
+  const [search, setSearch] = useState("");
 
-  const { data: orderData, isLoading: orderLoading } = useQuery({
-    queryKey: ["instances", "order_flow"],
-    queryFn: () => fetch("/api/workflows/instances?workflowType=order_flow").then((r) => r.json()),
+  const {
+    data,
+    error,
+    isError,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useQuery<OpsTodoListResponse>({
+    queryKey: ["ops-todos", type, status, search],
+    queryFn: () => fetchOpsTodos(type, status, search),
     refetchInterval: 5000,
   });
 
-  const { data: approvalData, isLoading: approvalLoading } = useQuery({
-    queryKey: ["instances", "approval"],
-    queryFn: () => fetch("/api/workflows/instances?targetType=refund").then((r) => r.json()),
-    refetchInterval: 5000,
+  const actionMutation = useMutation({
+    mutationFn: async ({
+      action,
+      todo,
+    }: {
+      action: OpsTodoAction;
+      todo: OpsTodo;
+    }) => {
+      const response = await fetch(
+        `/api/ops/todos/${encodeURIComponent(todo.id)}/action`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: action.key }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(await readApiError(response));
+      }
+
+      return response.json() as Promise<{ success: true }>;
+    },
+    onSuccess: (_result, { action }) => {
+      void queryClient.invalidateQueries({ queryKey: ["ops-todos"] });
+      toast.success(`${action.label}成功`);
+    },
+    onError: (mutationError) => {
+      toast.error(
+        mutationError instanceof Error ? mutationError.message : "操作失败",
+      );
+    },
   });
 
-  const transitionMutation = useMutation({
-    mutationFn: ({ id, trigger }: { id: string; trigger: string }) =>
-      fetch(`/api/workflows/instances/${id}/transition`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trigger }) }).then((r) => r.json()),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["instances"] }); toast.success("操作成功"); },
-    onError: (error: Error) => toast.error(error.message || "操作失败"),
-  });
+  const summary = data?.summary ?? emptySummary;
+  const todos = data?.todos ?? [];
+  const summaryCards = [
+    {
+      label: "待处理",
+      value: summary.total,
+      className: "border-slate-200 bg-slate-50",
+    },
+    {
+      label: "订单待发货",
+      value: summary.orders,
+      className: "border-sky-200 bg-sky-50",
+    },
+    {
+      label: "退款待审核",
+      value: summary.refunds,
+      className: "border-rose-200 bg-rose-50",
+    },
+    {
+      label: "商品待审核",
+      value: summary.products,
+      className: "border-emerald-200 bg-emerald-50",
+    },
+  ];
 
-  function nextTrigger(instance: WorkflowInstanceView): { label: string; trigger: string } | null {
-    const available = instance.workflow.edges.filter((edge) => edge.from === instance.currentNode);
-    if (available.length === 0) return null;
-    return { label: available[0].label, trigger: available[0].trigger };
-  }
+  function renderTodoContent() {
+    if (isLoading) {
+      return (
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            加载待办中...
+          </CardContent>
+        </Card>
+      );
+    }
 
-  function renderInstances(data: WorkflowInstancesResponse | undefined) {
-    if (!data?.instances?.length) return <p className="text-gray-500 text-center py-8">暂无数据</p>;
+    if (isError) {
+      return (
+        <Card className="border-red-200 bg-red-50/70">
+          <CardContent className="space-y-3 p-6">
+            <div>
+              <p className="font-medium text-red-800">待办加载失败</p>
+              <p className="mt-1 text-sm text-red-700">
+                {error instanceof Error ? error.message : "请稍后重试"}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void refetch()}>
+              重试
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (todos.length === 0) {
+      return (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="font-medium">暂无待办</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              当前筛选条件下没有需要处理的事项。
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
-      <div className="grid gap-4">
-        {data.instances.map((inst) => {
-          const next = nextTrigger(inst);
-          const nodes = inst.workflow.nodes;
-          const doneNodes = inst.logs.map((l) => l.toNode);
-          const currentNodeLabel = nodes.find((n) => n.key === inst.currentNode)?.label ?? inst.currentNode;
-          return (
-            <Card key={inst.id}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <span className="font-bold text-lg">{inst.workflow.name}</span>
-                    {inst.context.orderNo && <span className="ml-3 text-sm text-gray-500">{inst.context.orderNo}</span>}
+      <div className="space-y-3">
+        {todos.map((todo) => (
+          <Card key={todo.id} className="overflow-visible">
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Badge
+                      variant="outline"
+                      className={typeClasses[todo.type]}
+                    >
+                      {typeLabels[todo.type]}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={toneClasses[todo.statusTone]}
+                    >
+                      {getStatusLabel(todo)}
+                    </Badge>
+                    <span>{formatTime(todo.createdAt)}</span>
                   </div>
-                  <Badge className={nodeColors[inst.currentNode] ?? "bg-gray-100"}>{currentNodeLabel}</Badge>
-                </div>
-                <div className="flex items-center gap-1 mb-3 flex-wrap">
-                  {nodes.map((node, idx) => {
-                    const isDone = doneNodes.includes(node.key);
-                    const isCurrent = node.key === inst.currentNode;
-                    return (
-                      <div key={node.key} className="flex items-center gap-1">
-                        {idx > 0 && <span className="text-gray-300 text-xs">→</span>}
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${isCurrent ? "font-bold ring-2 ring-blue-400 bg-blue-50" : isDone ? "bg-green-50 text-green-600" : "bg-gray-50 text-gray-400"}`}>
-                          {isDone ? "✓ " : ""}{isCurrent ? "● " : ""}{node.label}
+
+                  <div className="min-w-0">
+                    <h2 className="break-words text-base font-semibold leading-snug">
+                      {todo.title}
+                    </h2>
+                    <p className="mt-1 break-words text-sm text-muted-foreground">
+                      {todo.subtitle}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                    <span className="inline-flex gap-1">
+                      <span className="text-muted-foreground">金额</span>
+                      <span className="font-medium">
+                        {formatMoney(todo.amount)}
+                      </span>
+                    </span>
+                    {todo.customerName && (
+                      <span className="inline-flex min-w-0 gap-1">
+                        <span className="text-muted-foreground">客户</span>
+                        <span className="min-w-0 max-w-48 truncate font-medium">
+                          {todo.customerName}
                         </span>
-                      </div>
-                    );
-                  })}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {next && inst.status === "running" && (
-                  <Button size="sm" onClick={() => transitionMutation.mutate({ id: inst.id, trigger: next.trigger })} disabled={transitionMutation.isPending}>
-                    {next.label}
-                  </Button>
-                )}
-                {inst.status === "completed" && <Badge variant="outline" className="text-green-600">已完成</Badge>}
-              </CardContent>
-            </Card>
-          );
-        })}
+
+                <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:max-w-xs lg:justify-end">
+                  {todo.actions.length > 0 ? (
+                    todo.actions.map((action) => (
+                      <Button
+                        key={action.key}
+                        size="sm"
+                        variant={action.variant}
+                        disabled={actionMutation.isPending}
+                        onClick={() => actionMutation.mutate({ action, todo })}
+                        className="h-auto min-h-7 whitespace-normal px-3 py-1.5"
+                      >
+                        {action.label}
+                      </Button>
+                    ))
+                  ) : (
+                    <Badge variant="outline">暂无操作</Badge>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">流程看板</h1>
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="order_flow">订单流程</TabsTrigger>
-          <TabsTrigger value="approval">审批流程</TabsTrigger>
-        </TabsList>
-        <TabsContent value="order_flow" className="mt-4">
-          {orderLoading ? <p>加载中...</p> : renderInstances(orderData)}
-        </TabsContent>
-        <TabsContent value="approval" className="mt-4">
-          {approvalLoading ? <p>加载中...</p> : renderInstances(approvalData)}
-        </TabsContent>
-      </Tabs>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">运营工作台</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            集中处理订单发货、退款审核和商品上架审核。
+          </p>
+        </div>
+        {isFetching && !isLoading && (
+          <Badge variant="outline" className="w-fit">
+            同步中
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <Card key={card.label} size="sm" className={card.className}>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{card.label}</p>
+              <p className="mt-2 text-2xl font-semibold">{card.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="overflow-visible">
+        <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {typeOptions.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant={type === option.value ? "default" : "outline"}
+                onClick={() => setType(option.value)}
+                className="h-auto min-h-7 whitespace-normal px-3 py-1.5"
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-[180px_minmax(220px,320px)] lg:flex lg:items-center">
+            <select
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as TodoStatusFilter)
+              }
+              className="h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="搜索标题、客户、金额..."
+              className="w-full"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {renderTodoContent()}
     </div>
   );
 }
