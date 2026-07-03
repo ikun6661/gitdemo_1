@@ -1,6 +1,14 @@
+import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
+import { requireStaff } from "@/server/auth/guards";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  try {
+    await requireStaff();
+  } catch {
+    redirect("/login?callbackUrl=/dashboard");
+  }
+
   return (
     <>
       <Header />
