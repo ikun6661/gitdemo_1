@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireStaff } from "@/server/auth/guards";
+import {
+  AuthRequiredError,
+  PermissionDeniedError,
+  requireStaff,
+} from "@/server/auth/guards";
 import { PRODUCT_STATUSES } from "@/server/domain/constants";
 import { badRequest, errorResponse, notFound } from "@/server/shared/api";
 import { z } from "zod";
@@ -20,14 +24,48 @@ const updateSchema = z.object({
   status: z.enum(PRODUCT_STATUSES).optional(),
 });
 
-export async function GET(req: NextRequest, ctx: RouteContext<"/api/products/[id]">) {
-  const { id } = await ctx.params;
-  const product = await prisma.product.findUnique({ where: { id }, include: { category: true } });
-  if (!product) return notFound(new Error("商品不存在"));
-  return NextResponse.json(product);
+async function canReadUnpublishedProducts(): Promise<boolean> {
+  try {
+    await requireStaff();
+    return true;
+  } catch (error: unknown) {
+    if (
+      error instanceof AuthRequiredError ||
+      error instanceof PermissionDeniedError
+    ) {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
-export async function PUT(req: NextRequest, ctx: RouteContext<"/api/products/[id]">) {
+export async function GET(
+  req: NextRequest,
+  ctx: RouteContext<"/api/products/[id]">
+) {
+  try {
+    const isStaff = await canReadUnpublishedProducts();
+    const { id } = await ctx.params;
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: { category: true },
+    });
+
+    if (!product || (!isStaff && product.status !== "published")) {
+      return notFound(new Error("商品不存在"));
+    }
+
+    return NextResponse.json(product);
+  } catch (error: unknown) {
+    return errorResponse(error);
+  }
+}
+
+export async function PUT(
+  req: NextRequest,
+  ctx: RouteContext<"/api/products/[id]">
+) {
   try {
     await requireStaff();
     const { id } = await ctx.params;
@@ -54,14 +92,21 @@ export async function PUT(req: NextRequest, ctx: RouteContext<"/api/products/[id
   }
 }
 
-export async function DELETE(req: NextRequest, ctx: RouteContext<"/api/products/[id]">) {
+export async function DELETE(
+  req: NextRequest,
+  ctx: RouteContext<"/api/products/[id]">
+) {
   try {
     await requireStaff();
     const { id } = await ctx.params;
-    const orderItemCount = await prisma.orderItem.count({ where: { productId: id } });
+    const orderItemCount = await prisma.orderItem.count({
+      where: { productId: id },
+    });
+
     if (orderItemCount > 0) {
       return badRequest(new Error("该商品已关联订单，不可删除"));
     }
+
     await prisma.product.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

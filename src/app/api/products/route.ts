@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireStaff } from "@/server/auth/guards";
+import {
+  AuthRequiredError,
+  PermissionDeniedError,
+  requireStaff,
+} from "@/server/auth/guards";
 import { PRODUCT_STATUSES } from "@/server/domain/constants";
 import { errorResponse } from "@/server/shared/api";
 import { z } from "zod";
@@ -20,37 +24,64 @@ const createSchema = z.object({
   status: z.enum(PRODUCT_STATUSES).optional(),
 });
 
+async function canReadUnpublishedProducts(): Promise<boolean> {
+  try {
+    await requireStaff();
+    return true;
+  } catch (error: unknown) {
+    if (
+      error instanceof AuthRequiredError ||
+      error instanceof PermissionDeniedError
+    ) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const categoryId = searchParams.get("categoryId");
-  const status = searchParams.get("status") ?? "published";
-  const search = searchParams.get("search") ?? "";
-  const page = Number(searchParams.get("page")) || 1;
-  const pageSize = Number(searchParams.get("pageSize")) || 12;
+  try {
+    const { searchParams } = new URL(req.url);
+    const categoryId = searchParams.get("categoryId");
+    const requestedStatus = searchParams.get("status");
+    const search = searchParams.get("search") ?? "";
+    const page = Number(searchParams.get("page")) || 1;
+    const pageSize = Number(searchParams.get("pageSize")) || 12;
+    const isStaff = await canReadUnpublishedProducts();
 
-  const where: Record<string, unknown> = {};
-  if (categoryId) where.categoryId = categoryId;
-  if (status) where.status = status;
-  if (search) where.name = { contains: search };
+    const status = isStaff
+      ? requestedStatus === ""
+        ? undefined
+        : requestedStatus ?? undefined
+      : "published";
 
-  const [products, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      include: { category: true },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.product.count({ where }),
-  ]);
+    const where: Record<string, unknown> = {};
+    if (categoryId) where.categoryId = categoryId;
+    if (status) where.status = status;
+    if (search) where.name = { contains: search };
 
-  // 解析 JSON 字符串字段
-  const parsed = products.map((p) => ({
-    ...p,
-    images: typeof p.images === "string" ? JSON.parse(p.images) : p.images,
-  }));
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: { category: true },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.product.count({ where }),
+    ]);
 
-  return NextResponse.json({ products: parsed, total, page, pageSize });
+    // 解析 JSON 字符串字段
+    const parsed = products.map((p) => ({
+      ...p,
+      images: typeof p.images === "string" ? JSON.parse(p.images) : p.images,
+    }));
+
+    return NextResponse.json({ products: parsed, total, page, pageSize });
+  } catch (error: unknown) {
+    return errorResponse(error);
+  }
 }
 
 export async function POST(req: NextRequest) {

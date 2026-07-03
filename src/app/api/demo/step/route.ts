@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { transition, getInstance } from "@/server/workflow/engine";
+import { requireStaff } from "@/server/auth/guards";
+import { errorResponse } from "@/server/shared/api";
+import { getInstance, transition } from "@/server/workflow/engine";
 
 const STEPS: Record<string, string[]> = {
   order_flow: ["pay", "ship", "receive", "complete"],
@@ -8,19 +10,38 @@ const STEPS: Record<string, string[]> = {
 };
 
 export async function POST(req: NextRequest) {
-  const { instanceId, scenario, stepIndex } = await req.json();
-  const triggers = STEPS[scenario];
-  if (!triggers || stepIndex >= triggers.length) return NextResponse.json({ error: "流程已完成" }, { status: 400 });
+  try {
+    const user = await requireStaff();
+    const { instanceId, scenario, stepIndex } = await req.json();
+    const triggers = STEPS[scenario];
 
-  const trigger = triggers[stepIndex];
-  const result = await transition({ instanceId, trigger, operator: "演示系统", comment: `演示步骤 ${stepIndex + 1}` });
-  const instance = await getInstance(instanceId);
-  const nodes = instance.workflow.nodes as unknown as { key: string; label: string }[];
-  const currentNode = nodes.find((n) => n.key === instance.currentNode);
+    if (!triggers || stepIndex >= triggers.length) {
+      return NextResponse.json({ error: "流程已完成" }, { status: 400 });
+    }
 
-  return NextResponse.json({
-    success: true, stepIndex: stepIndex + 1, currentStep: stepIndex + 1,
-    totalSteps: triggers.length, currentNodeLabel: currentNode?.label,
-    isComplete: stepIndex + 1 >= triggers.length || result.isEnd,
-  });
+    const trigger = triggers[stepIndex];
+    const result = await transition({
+      instanceId,
+      trigger,
+      operator: user.name ?? "unknown",
+      comment: `演示步骤 ${stepIndex + 1}`,
+    });
+    const instance = await getInstance(instanceId);
+    const nodes = instance.workflow.nodes as unknown as {
+      key: string;
+      label: string;
+    }[];
+    const currentNode = nodes.find((n) => n.key === instance.currentNode);
+
+    return NextResponse.json({
+      success: true,
+      stepIndex: stepIndex + 1,
+      currentStep: stepIndex + 1,
+      totalSteps: triggers.length,
+      currentNodeLabel: currentNode?.label,
+      isComplete: stepIndex + 1 >= triggers.length || result.isEnd,
+    });
+  } catch (error: unknown) {
+    return errorResponse(error);
+  }
 }

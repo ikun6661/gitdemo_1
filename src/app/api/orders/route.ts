@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/server/auth/guards";
-import { createInstance } from "@/server/workflow/engine";
 import { badRequest, errorResponse } from "@/server/shared/api";
+import { createInstance } from "@/server/workflow/engine";
 
-// 生成订单号
 function generateOrderNo(): string {
   const now = new Date();
   const date = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -12,7 +11,6 @@ function generateOrderNo(): string {
   return `ORD-${date}-${rand}`;
 }
 
-// 获取订单列表（客户只能看自己的；管理员看全部）
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth();
@@ -40,7 +38,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 创建订单（从购物车结算）
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth();
@@ -49,21 +46,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { address, cartItemIds } = body;
 
-    if (!cartItemIds || cartItemIds.length === 0) {
+    if (!Array.isArray(cartItemIds) || cartItemIds.length === 0) {
       return NextResponse.json({ error: "购物车为空" }, { status: 400 });
     }
 
-    // 查询购物车项目
+    const uniqueCartItemIds = [...new Set(cartItemIds)];
     const cartItems = await prisma.cartItem.findMany({
-      where: { id: { in: cartItemIds }, userId },
+      where: { id: { in: uniqueCartItemIds }, userId },
       include: { product: true },
     });
 
-    if (cartItems.length === 0) {
-      return NextResponse.json({ error: "购物车项目无效" }, { status: 400 });
+    if (cartItems.length !== uniqueCartItemIds.length) {
+      return NextResponse.json(
+        { error: "购物车项目无效" },
+        { status: 400 }
+      );
     }
 
-    // 计算总金额并校验库存
     let totalAmount = 0;
     const orderItems: {
       productId: string;
@@ -80,6 +79,7 @@ export async function POST(req: NextRequest) {
       if (item.product.stock < item.quantity) {
         return badRequest(new Error(`${item.product.name} 库存不足`));
       }
+
       totalAmount += item.product.price * item.quantity;
       orderItems.push({
         productId: item.product.id,
@@ -95,7 +95,6 @@ export async function POST(req: NextRequest) {
 
     const orderNo = generateOrderNo();
 
-    // 事务：创建订单 + 扣库存 + 清空购物车对应项
     const order = await prisma.$transaction(async (tx) => {
       const o = await tx.order.create({
         data: {
@@ -115,7 +114,6 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // 扣减库存
       for (const item of orderItems) {
         await tx.product.update({
           where: { id: item.productId },
@@ -123,15 +121,13 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // 清空购物车中已下单的商品
       await tx.cartItem.deleteMany({
-        where: { id: { in: cartItemIds } },
+        where: { id: { in: uniqueCartItemIds }, userId },
       });
 
       return o;
     });
 
-    // 启动订单工作流
     await createInstance({
       workflowType: "order_flow",
       targetType: "order",
