@@ -1,11 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 type OpsTodoAction = {
@@ -41,6 +50,12 @@ type OpsTodoSummary = {
 type OpsTodoListResponse = {
   summary: OpsTodoSummary;
   todos: OpsTodo[];
+};
+
+type ActionMutationVariables = {
+  action: OpsTodoAction;
+  todo: OpsTodo;
+  comment?: string;
 };
 
 type TodoTypeFilter = "all" | OpsTodo["type"];
@@ -104,6 +119,22 @@ const emptySummary: OpsTodoSummary = {
   products: 0,
 };
 
+const searchDebounceMs = 300;
+
+function useDebouncedTrimmedValue(value: string, delayMs: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value.trim());
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedValue(value.trim());
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [delayMs, value]);
+
+  return debouncedValue;
+}
+
 function formatMoney(value?: number) {
   if (value === undefined) return "未记录金额";
 
@@ -124,8 +155,18 @@ function formatTime(value: string) {
 
 async function readApiError(response: Response) {
   try {
-    const body = (await response.json()) as { error?: string };
-    return body.error || "操作失败";
+    const body = (await response.json()) as unknown;
+
+    if (
+      body &&
+      typeof body === "object" &&
+      "error" in body &&
+      typeof (body as { error: unknown }).error === "string"
+    ) {
+      return (body as { error: string }).error;
+    }
+
+    return "操作失败";
   } catch {
     return "操作失败";
   }
@@ -157,11 +198,36 @@ function getStatusLabel(todo: OpsTodo) {
   return statusLabels[todo.status] ?? todo.statusLabel ?? todo.status;
 }
 
+function getPendingActionKey(todo: OpsTodo, action: OpsTodoAction) {
+  return `${todo.id}:${action.key}`;
+}
+
+function hasPendingActionForTodo(
+  pendingActionKeys: Set<string>,
+  todoId: string,
+) {
+  const todoKeyPrefix = `${todoId}:`;
+
+  return Array.from(pendingActionKeys).some((key) =>
+    key.startsWith(todoKeyPrefix),
+  );
+}
+
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [type, setType] = useState<TodoTypeFilter>("all");
   const [status, setStatus] = useState<TodoStatusFilter>("all");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedTrimmedValue(search, searchDebounceMs);
+  const [commentRequest, setCommentRequest] = useState<{
+    todo: OpsTodo;
+    action: OpsTodoAction;
+  } | null>(null);
+  const [actionComment, setActionComment] = useState("");
+  const pendingActionKeysRef = useRef(new Set<string>());
+  const [pendingActionKeys, setPendingActionKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const {
     data,
@@ -171,25 +237,23 @@ export default function DashboardPage() {
     isLoading,
     refetch,
   } = useQuery<OpsTodoListResponse>({
-    queryKey: ["ops-todos", type, status, search],
-    queryFn: () => fetchOpsTodos(type, status, search),
+    queryKey: ["ops-todos", type, status, debouncedSearch],
+    queryFn: () => fetchOpsTodos(type, status, debouncedSearch),
     refetchInterval: 5000,
   });
 
   const actionMutation = useMutation({
-    mutationFn: async ({
-      action,
-      todo,
-    }: {
-      action: OpsTodoAction;
-      todo: OpsTodo;
-    }) => {
+    mutationFn: async ({ action, todo, comment }: ActionMutationVariables) => {
+      const body =
+        comment === undefined
+          ? { action: action.key }
+          : { action: action.key, comment };
       const response = await fetch(
         `/api/ops/todos/${encodeURIComponent(todo.id)}/action`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: action.key }),
+          body: JSON.stringify(body),
         },
       );
 
@@ -210,26 +274,117 @@ export default function DashboardPage() {
     },
   });
 
+  function setActionPending(actionKey: string, isPending: boolean) {
+    const nextPendingActionKeys = new Set(pendingActionKeysRef.current);
+
+    if (isPending) {
+      nextPendingActionKeys.add(actionKey);
+    } else {
+      nextPendingActionKeys.delete(actionKey);
+    }
+
+    pendingActionKeysRef.current = nextPendingActionKeys;
+    setPendingActionKeys(nextPendingActionKeys);
+  }
+
+  async function submitTodoAction(
+    todo: OpsTodo,
+    action: OpsTodoAction,
+    comment?: string,
+  ) {
+    const actionKey = getPendingActionKey(todo, action);
+
+    if (hasPendingActionForTodo(pendingActionKeysRef.current, todo.id)) {
+      return false;
+    }
+
+    setActionPending(actionKey, true);
+
+    try {
+      await actionMutation.mutateAsync({ action, todo, comment });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setActionPending(actionKey, false);
+    }
+  }
+
+  function handleActionClick(todo: OpsTodo, action: OpsTodoAction) {
+    if (hasPendingActionForTodo(pendingActionKeysRef.current, todo.id)) {
+      return;
+    }
+
+    if (action.requiresComment) {
+      setCommentRequest({ todo, action });
+      setActionComment("");
+      return;
+    }
+
+    void submitTodoAction(todo, action);
+  }
+
+  async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!commentRequest) return;
+
+    const comment = actionComment.trim();
+
+    if (comment.length === 0) {
+      toast.error("请填写驳回/处理原因");
+      return;
+    }
+
+    const submitted = await submitTodoAction(
+      commentRequest.todo,
+      commentRequest.action,
+      comment,
+    );
+
+    if (submitted) {
+      setCommentRequest(null);
+      setActionComment("");
+    }
+  }
+
+  function handleCommentOpenChange(open: boolean) {
+    if (!open) {
+      setCommentRequest(null);
+      setActionComment("");
+    }
+  }
+
+  function handleTypeChange(nextType: TodoTypeFilter) {
+    if (nextType === type) return;
+
+    setType(nextType);
+    setStatus("all");
+  }
+
   const summary = data?.summary ?? emptySummary;
   const todos = data?.todos ?? [];
+  const isCommentActionPending = commentRequest
+    ? hasPendingActionForTodo(pendingActionKeys, commentRequest.todo.id)
+    : false;
   const summaryCards = [
     {
-      label: "待处理",
+      label: "当前待处理",
       value: summary.total,
       className: "border-slate-200 bg-slate-50",
     },
     {
-      label: "订单待发货",
+      label: "当前订单",
       value: summary.orders,
       className: "border-sky-200 bg-sky-50",
     },
     {
-      label: "退款待审核",
+      label: "当前退款",
       value: summary.refunds,
       className: "border-rose-200 bg-rose-50",
     },
     {
-      label: "商品待审核",
+      label: "当前商品",
       value: summary.products,
       className: "border-emerald-200 bg-emerald-50",
     },
@@ -329,18 +484,25 @@ export default function DashboardPage() {
 
                 <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:max-w-xs lg:justify-end">
                   {todo.actions.length > 0 ? (
-                    todo.actions.map((action) => (
-                      <Button
-                        key={action.key}
-                        size="sm"
-                        variant={action.variant}
-                        disabled={actionMutation.isPending}
-                        onClick={() => actionMutation.mutate({ action, todo })}
-                        className="h-auto min-h-7 whitespace-normal px-3 py-1.5"
-                      >
-                        {action.label}
-                      </Button>
-                    ))
+                    todo.actions.map((action) => {
+                      const isActionPending = hasPendingActionForTodo(
+                        pendingActionKeys,
+                        todo.id,
+                      );
+
+                      return (
+                        <Button
+                          key={action.key}
+                          size="sm"
+                          variant={action.variant}
+                          disabled={isActionPending}
+                          onClick={() => handleActionClick(todo, action)}
+                          className="h-auto min-h-7 whitespace-normal px-3 py-1.5"
+                        >
+                          {action.label}
+                        </Button>
+                      );
+                    })
                   ) : (
                     <Badge variant="outline">暂无操作</Badge>
                   )}
@@ -389,7 +551,7 @@ export default function DashboardPage() {
                 type="button"
                 size="sm"
                 variant={type === option.value ? "default" : "outline"}
-                onClick={() => setType(option.value)}
+                onClick={() => handleTypeChange(option.value)}
                 className="h-auto min-h-7 whitespace-normal px-3 py-1.5"
               >
                 {option.label}
@@ -422,6 +584,54 @@ export default function DashboardPage() {
       </Card>
 
       {renderTodoContent()}
+
+      <Dialog
+        open={commentRequest !== null}
+        onOpenChange={handleCommentOpenChange}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {commentRequest
+                ? `${commentRequest.action.label}原因`
+                : "填写处理原因"}
+            </DialogTitle>
+            <DialogDescription>
+              {commentRequest?.todo.title ?? ""}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCommentSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label
+                htmlFor="action-comment"
+                className="text-sm font-medium leading-none"
+              >
+                驳回/处理原因
+              </label>
+              <Textarea
+                id="action-comment"
+                value={actionComment}
+                onChange={(event) => setActionComment(event.target.value)}
+                disabled={isCommentActionPending}
+                placeholder="请输入原因"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isCommentActionPending}
+                onClick={() => handleCommentOpenChange(false)}
+              >
+                取消
+              </Button>
+              <Button type="submit" disabled={isCommentActionPending}>
+                提交
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
