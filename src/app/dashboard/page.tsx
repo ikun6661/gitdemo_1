@@ -264,7 +264,6 @@ export default function DashboardPage() {
       return response.json() as Promise<{ success: true }>;
     },
     onSuccess: (_result, { action }) => {
-      void queryClient.invalidateQueries({ queryKey: ["ops-todos"] });
       toast.success(`${action.label}成功`);
     },
     onError: (mutationError) => {
@@ -302,6 +301,7 @@ export default function DashboardPage() {
 
     try {
       await actionMutation.mutateAsync({ action, todo, comment });
+      await queryClient.invalidateQueries({ queryKey: ["ops-todos"] });
       return true;
     } catch {
       return false;
@@ -348,8 +348,16 @@ export default function DashboardPage() {
     }
   }
 
+  const isCommentActionPending = commentRequest
+    ? hasPendingActionForTodo(pendingActionKeys, commentRequest.todo.id)
+    : false;
+
   function handleCommentOpenChange(open: boolean) {
     if (!open) {
+      if (isCommentActionPending) {
+        return;
+      }
+
       setCommentRequest(null);
       setActionComment("");
     }
@@ -364,9 +372,6 @@ export default function DashboardPage() {
 
   const summary = data?.summary ?? emptySummary;
   const todos = data?.todos ?? [];
-  const isCommentActionPending = commentRequest
-    ? hasPendingActionForTodo(pendingActionKeys, commentRequest.todo.id)
-    : false;
   const summaryCards = [
     {
       label: "当前待处理",
@@ -589,7 +594,7 @@ export default function DashboardPage() {
         open={commentRequest !== null}
         onOpenChange={handleCommentOpenChange}
       >
-        <DialogContent>
+        <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
               {commentRequest
